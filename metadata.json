@@ -1,0 +1,6 @@
+{
+  "name": "Aether Rift: Tactical MOBA",
+  "description": "Semi-3D isometric fantasy MOBA featuring 5 distinct heroes, organic three-lane arena, jungle camps, minion waves, and tactical combat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

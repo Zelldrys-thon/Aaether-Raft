@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Aether Rift: Tactical MOBA",
+  "short_name": "Aether MOBA",
+  "description": "Semi-3D isometric fantasy MOBA featuring 5 distinct heroes, three-lane arena, tactical elixirs, and dynamic combat.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "theme_color": "#05080d",
+  "background_color": "#05080d",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

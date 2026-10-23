@@ -1,0 +1,99 @@
+name: Build Android APK & Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install NPM Dependencies
+        run: npm ci || npm install
+
+      - name: Generate Version File
+        run: |
+          mkdir -p public
+          echo "{\"version\":\"1.0.${{ github.run_number }}\",\"commit\":\"${{ github.sha }}\",\"buildTime\":$(date +%s%3N)}" > public/version.json
+
+      - name: Build Web Application
+        run: npm run build
+
+      - name: Setup Capacitor Android
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Build APK via Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Prepare APK Output
+        run: |
+          mkdir -p build-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/Aetheria-MOBA-v${{ github.run_number }}.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/Aetheria-MOBA-latest.apk
+
+      - name: Upload APK to Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aetheria-MOBA-Android-APK
+          path: build-output/*.apk
+          retention-days: 30
+
+      - name: Publish GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/')
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release v1.0.${{ github.run_number }} - Android APK
+          draft: false
+          prerelease: false
+          body: |
+            ## 🎮 Aetheria MOBA - Android APK Build
+            
+            Otomatis dibuild melalui GitHub Actions dari branch `${{ github.ref_name }}`.
+            
+            ### 📥 Download APK Langsung ke HP:
+            - **[Aetheria-MOBA-v${{ github.run_number }}.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/Aetheria-MOBA-v${{ github.run_number }}.apk)**
+            - **[Aetheria-MOBA-latest.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/Aetheria-MOBA-latest.apk)**
+            
+            ### 📱 Cara Memainkan di HP Android:
+            1. Download file APK langsung dari link di atas lewat browser HP.
+            2. Buka file APK yang terunduh dan izinkan instalasi (*Install Unknown Apps*).
+            3. Jalankan game — grafis 3D MOBA, kontrol virtual joystick, dan radial skill buttons siap dimainkan!
+          files: |
+            build-output/Aetheria-MOBA-v${{ github.run_number }}.apk
+            build-output/Aetheria-MOBA-latest.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
