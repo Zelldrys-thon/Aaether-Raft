@@ -1,4 +1,4 @@
-export type GameScreen = 'lobby' | 'pick' | 'games';
+﻿export type GameScreen = 'lobby' | 'pick' | 'games';
 
 export type PickStep = 'mode' | 'room' | 'draft';
 
@@ -8,7 +8,7 @@ export type ControlScheme = 'right_click' | 'wasd';
 
 export type HeroId = 'vanguard' | 'arcanist' | 'ranger' | 'wraith' | 'colossus';
 
-export type HeroRole = 'Fighter' | 'Mage' | 'Marksman' | 'Support' | 'Tank';
+export type HeroRole = 'Fighter' | 'Mage' | 'Marksman' | 'Assassin' | 'Tank' | 'Support';
 
 export type HeroAnimState = 'idle' | 'walk' | 'attack' | 'skill';
 
@@ -70,7 +70,7 @@ export interface FriendEntry {
 export type DraftPickStatus = 'waiting' | 'picking' | 'locked';
 
 export interface PartyMemberSlot {
-  slotIndex: number; // 0..4 (max 5 players in 1 team lobby)
+  slotIndex: number;
   id: string;
   nickname: string;
   rankTitle: string;
@@ -97,12 +97,15 @@ export interface HeroStats {
   maxMana: number;
   attackDamage: number;
   attackRange: number;
-  attackSpeed: number; // attacks per second
+  attackSpeed: number;
   moveSpeed: number;
   armor: number;
 }
 
+export type SkillEffectCategory = 'Line' | 'Circle' | 'Dash' | 'Buff';
+
 export type SkillEffectType =
+  | SkillEffectCategory
   | 'cleave_slam'
   | 'valor_charge'
   | 'earthshatter'
@@ -119,19 +122,41 @@ export type SkillEffectType =
   | 'monolith_bulwark'
   | 'avalanche_crash';
 
+export interface Visual3DConcept {
+  headStyle: string;
+  shoulderStyle: string;
+  weaponStyle: string;
+  ornaments: string[];
+  renderStyle: {
+    polyCountEstimate: number;
+    flatShaded: boolean;
+    roughness: number;
+    metalness: number;
+  };
+}
+
 export interface HeroSkillInfo {
   id: string;
   slot: SkillSlotIndex;
   hotkey: 'Q' | 'W' | 'E';
   name: string;
-  cooldown: number; // seconds
+  cooldown: number;
   manaCost: number;
   damage: number;
   range: number;
   radius: number;
   description: string;
   effectType: SkillEffectType;
-  iconType: 'sword' | 'shield' | 'slam' | 'orb' | 'blink' | 'nova' | 'arrows' | 'wind' | 'snipe' | 'daggers' | 'heal' | 'sanctuary' | 'spikes' | 'bulwark' | 'meteor';
+  category?: SkillEffectCategory;
+  iconType: string;
+  icon?: string;
+  mechanicDetails?: {
+    castTime: number;
+    projectileSpeed?: number;
+    buffDuration?: number;
+    crowdControl?: 'Stun' | 'Slow' | 'Knockup' | 'Silence' | 'None';
+    ccDuration?: number;
+  };
 }
 
 export interface HeroDefinition {
@@ -143,6 +168,7 @@ export interface HeroDefinition {
   secondaryColor: number;
   accentColor: number;
   accentCss: string;
+  visualConcept?: Visual3DConcept;
   stats: HeroStats;
   skills: [HeroSkillInfo, HeroSkillInfo, HeroSkillInfo];
 }
