@@ -33,7 +33,7 @@ import {
   updateDeployableRigVisuals,
 } from '../combat/tacticalSystem';
 import { HERO_DEFINITIONS, HERO_LIST, SHOP_ITEMS } from '../heroes/heroDefinitions';
-import { createHeroRig, HeroRig, updateHeroRigAnimation } from '../heroes/heroBuilder';
+import { createHeroRig, HeroRig, preloadAllHeroGlbs, updateHeroRigAnimation } from '../heroes/heroBuilder';
 import {
   ArenaMapObjects,
   buildLobbyStage,
@@ -281,6 +281,11 @@ export class MobaGameEngine {
 
     this.scene.add(this.matchGroup);
     this.vfx = new VfxSystem(this.scene);
+
+    // Asynchronously preload all 5 Blender exported GLB heroes
+    preloadAllHeroGlbs().catch((err) => {
+      console.warn('[Engine] Preload heroes notice:', err);
+    });
 
     this.rebuildPreviewHero(this.selectedHeroId);
     this.bindEvents();

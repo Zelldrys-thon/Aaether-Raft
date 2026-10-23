@@ -1,4 +1,4 @@
-﻿export type GameScreen = 'lobby' | 'pick' | 'games';
+export type GameScreen = 'lobby' | 'pick' | 'games';
 
 export type PickStep = 'mode' | 'room' | 'draft';
 
@@ -218,6 +218,7 @@ export interface CombatEntity {
   animState: HeroAnimState;
   animTime: number;
   animLockTimer: number;
+  lastSkillSlot?: SkillSlotIndex;
   stunTimer: number;
   slowTimer: number;
   speedBuffTimer: number;
