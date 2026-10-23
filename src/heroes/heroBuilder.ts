@@ -1,10 +1,6 @@
 ﻿import * as THREE from 'three';
 import { HeroAnimState, HeroId, TeamId } from '../types/game';
 import { HERO_DEFINITIONS } from './heroDefinitions';
-import {
-  createDetailedMesh,
-  createDetailedPbrMaterial,
-} from '../rendering/proceduralTextures';
 
 export interface HeroRig {
   root: THREE.Group;
@@ -19,6 +15,38 @@ export interface HeroRig {
   teamRing: THREE.Mesh;
   shieldMesh: THREE.Mesh;
   materialsToFlash: THREE.MeshStandardMaterial[];
+}
+
+/**
+ * Creates 1:1 identical faceted low-poly mesh matching Blender's shade_flat output
+ */
+function createFacetedMesh(geo: THREE.BufferGeometry, mat: THREE.Material): THREE.Mesh {
+  const nonIndexedGeo = geo.toNonIndexed();
+  nonIndexedGeo.computeVertexNormals();
+  const mesh = new THREE.Mesh(nonIndexedGeo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+/**
+ * Matte PBR Material with exact flatShading & zero glare/distortion
+ */
+function createMatteMaterial(
+  colorHex: number,
+  roughness = 0.85,
+  metalness = 0.08,
+  emissiveHex = 0x000000,
+  emissiveIntensity = 0.0
+): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: new THREE.Color(colorHex),
+    roughness,
+    metalness,
+    flatShading: true,
+    emissive: new THREE.Color(emissiveHex),
+    emissiveIntensity,
+  });
 }
 
 export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
@@ -92,145 +120,56 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
   bodyGroup.add(rightLeg);
   bodyGroup.add(extraGroup);
 
+  // Common dark tone for flexible undersuit / joints
+  const mDark = registerMat(createMatteMaterial(0x161822, 0.92, 0.02));
+
   // ==========================================
   // 1. VANGUARD: Ignis Valen (Fighter/Brawler)
   // Two-Handed Executioner Claymore & Cinder Ember
   // ==========================================
   if (heroId === 'vanguard') {
-    const armorMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'armor',
-        primaryHex: 0x8f2526,
-        secondaryHex: 0x27293d,
-        accentHex: 0xe86a17,
-        roughness: 0.84,
-        metalness: 0.15,
-        flatShading: true,
-      })
-    );
-    const darkClothMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'cloth',
-        primaryHex: 0x27293d,
-        secondaryHex: 0x161824,
-        accentHex: 0xe86a17,
-        roughness: 0.88,
-        metalness: 0.05,
-        flatShading: true,
-      })
-    );
-    const bladeSteelMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'blade',
-        primaryHex: 0x8f2526,
-        secondaryHex: 0x27293d,
-        accentHex: 0xe86a17,
-        roughness: 0.78,
-        metalness: 0.25,
-        flatShading: true,
-      })
-    );
-    const cinderGlowMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'crystal',
-        primaryHex: 0xe86a17,
-        secondaryHex: 0x8f2526,
-        accentHex: 0xfef08a,
-        emissiveHex: 0xe86a17,
-        emissiveIntensity: 0.65,
-        roughness: 0.65,
-        metalness: 0.1,
-        flatShading: true,
-      })
-    );
+    const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.84, 0.15));
+    const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.88, 0.08));
+    const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.55, 0.22, def.accentColor, 0.45));
 
     // Pelvis & Belt
-    const pelvis = createDetailedMesh(
-      new THREE.CylinderGeometry(0.38, 0.32, 0.28, 6),
-      darkClothMat,
-      0x27293d,
-      0x8f2526,
-      0xe86a17
-    );
+    const pelvis = createFacetedMesh(new THREE.CylinderGeometry(0.38, 0.32, 0.28, 6), mSec);
     pelvis.position.y = 1.15;
     pelvis.scale.set(1.1, 1.0, 0.8);
     bodyGroup.add(pelvis);
 
-    const belt = createDetailedMesh(
-      new THREE.CylinderGeometry(0.42, 0.42, 0.08, 8),
-      armorMat,
-      0x161824,
-      0x27293d,
-      0xe86a17
-    );
+    const belt = createFacetedMesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 8), mDark);
     belt.position.y = 1.28;
     belt.scale.set(1.08, 1.0, 0.85);
     bodyGroup.add(belt);
 
-    const buckle = createDetailedMesh(
-      new THREE.BoxGeometry(0.12, 0.12, 0.12),
-      cinderGlowMat,
-      0xe86a17,
-      0xfef08a,
-      0xffffff
-    );
+    const buckle = createFacetedMesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), mAcc);
     buckle.position.set(0, 1.28, 0.36);
     bodyGroup.add(buckle);
 
     // Two-Stage Torso (Flexible Abdomen + Flaring Chest)
-    const ab = createDetailedMesh(
-      new THREE.CylinderGeometry(0.36, 0.33, 0.32, 6),
-      darkClothMat,
-      0x161824,
-      0x27293d,
-      0xe86a17
-    );
+    const ab = createFacetedMesh(new THREE.CylinderGeometry(0.36, 0.33, 0.32, 6), mDark);
     ab.position.y = 1.45;
     ab.scale.set(1.05, 1.0, 0.75);
     bodyGroup.add(ab);
 
     const chestGeo = new THREE.ConeGeometry(0.52, 0.48, 6);
     chestGeo.rotateX(Math.PI);
-    const chest = createDetailedMesh(
-      chestGeo,
-      armorMat,
-      0x8f2526,
-      0x27293d,
-      0xe86a17
-    );
+    const chest = createFacetedMesh(chestGeo, mPri);
     chest.position.y = 1.8;
     chest.scale.set(1.15, 1.0, 0.8);
-    chest.castShadow = true;
     bodyGroup.add(chest);
 
-    const chestPlate = createDetailedMesh(
-      new THREE.BoxGeometry(0.45, 0.38, 0.16),
-      armorMat,
-      0x8f2526,
-      0x27293d,
-      0xe86a17
-    );
+    const chestPlate = createFacetedMesh(new THREE.BoxGeometry(0.45, 0.38, 0.16), mSec);
     chestPlate.position.set(0, 1.84, 0.22);
     bodyGroup.add(chestPlate);
 
-    const coreGem = createDetailedMesh(
-      new THREE.OctahedronGeometry(0.1, 0),
-      cinderGlowMat,
-      0xe86a17,
-      0xfef08a,
-      0xffffff
-    );
+    const coreGem = createFacetedMesh(new THREE.OctahedronGeometry(0.1, 0), mAcc);
     coreGem.position.set(0, 1.84, 0.34);
     bodyGroup.add(coreGem);
 
     // Collar Gorget
-    const gorget = createDetailedMesh(
-      new THREE.TorusGeometry(0.28, 0.06, 4, 6),
-      armorMat,
-      0x27293d,
-      0x8f2526,
-      0xe86a17
-    );
+    const gorget = createFacetedMesh(new THREE.TorusGeometry(0.28, 0.06, 4, 6), mSec);
     gorget.rotation.x = Math.PI / 2;
     gorget.position.y = 2.06;
     bodyGroup.add(gorget);
@@ -240,44 +179,20 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     rightLeg.position.set(0.32, 1.05, 0);
 
     const createLeg = (legGroup: THREE.Group) => {
-      const thigh = createDetailedMesh(
-        new THREE.CylinderGeometry(0.16, 0.12, 0.46, 5),
-        darkClothMat,
-        0x161824,
-        0x27293d,
-        0xe86a17
-      );
+      const thigh = createFacetedMesh(new THREE.CylinderGeometry(0.16, 0.12, 0.46, 5), mDark);
       thigh.position.y = -0.22;
       legGroup.add(thigh);
 
-      const knee = createDetailedMesh(
-        new THREE.BoxGeometry(0.14, 0.14, 0.14),
-        armorMat,
-        0x8f2526,
-        0x27293d,
-        0xe86a17
-      );
+      const knee = createFacetedMesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), mSec);
       knee.position.set(0, -0.46, 0.12);
       knee.rotation.x = Math.PI / 4;
       legGroup.add(knee);
 
-      const calf = createDetailedMesh(
-        new THREE.CylinderGeometry(0.14, 0.11, 0.44, 5),
-        armorMat,
-        0x8f2526,
-        0x27293d,
-        0xe86a17
-      );
+      const calf = createFacetedMesh(new THREE.CylinderGeometry(0.14, 0.11, 0.44, 5), mPri);
       calf.position.y = -0.68;
       legGroup.add(calf);
 
-      const boot = createDetailedMesh(
-        new THREE.BoxGeometry(0.18, 0.16, 0.32),
-        armorMat,
-        0x27293d,
-        0x161824,
-        0x8f2526
-      );
+      const boot = createFacetedMesh(new THREE.BoxGeometry(0.18, 0.16, 0.32), mSec);
       boot.position.set(0, -0.94, 0.06);
       legGroup.add(boot);
     };
@@ -286,81 +201,47 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
 
     // Head: Knight Greathelm with Cheekplates & Visor
     headGroup.position.set(0, 2.32, 0);
-    const helm = createDetailedMesh(
-      new THREE.BoxGeometry(0.42, 0.46, 0.42),
-      armorMat,
-      0x8f2526,
-      0x27293d,
-      0xe86a17
-    );
+    const helm = createFacetedMesh(new THREE.BoxGeometry(0.42, 0.46, 0.42), mPri);
     headGroup.add(helm);
 
     const crestGeo = new THREE.ConeGeometry(0.08, 0.55, 4);
     crestGeo.rotateX(Math.PI / 6);
-    const crest = createDetailedMesh(
-      crestGeo,
-      cinderGlowMat,
-      0xe86a17,
-      0xfef08a,
-      0xffffff
-    );
+    const crest = createFacetedMesh(crestGeo, mAcc);
     crest.position.set(0, 0.35, -0.06);
     headGroup.add(crest);
 
-    const visor = createDetailedMesh(
-      new THREE.BoxGeometry(0.32, 0.06, 0.06),
-      cinderGlowMat,
-      0xe86a17,
-      0xfef08a,
-      0xffffff
-    );
+    const visor = createFacetedMesh(new THREE.BoxGeometry(0.32, 0.06, 0.06), mAcc);
     visor.position.set(0, 0.02, 0.23);
     headGroup.add(visor);
 
-    // Spiked Pauldrons
+    // Spiked Pauldrons & Arms
     leftArm.position.set(-0.64, 1.82, 0);
     rightArm.position.set(0.64, 1.82, 0);
 
     const createArm = (armGroup: THREE.Group, isRight: boolean) => {
-      const pauldron = createDetailedMesh(
-        new THREE.BoxGeometry(0.38, 0.32, 0.32),
-        armorMat,
-        0x8f2526,
-        0x27293d,
-        0xe86a17
-      );
+      const pauldron = createFacetedMesh(new THREE.BoxGeometry(0.38, 0.32, 0.32), mSec);
       pauldron.position.set(isRight ? 0.08 : -0.08, 0.08, 0);
       armGroup.add(pauldron);
 
-      const bicep = createDetailedMesh(
-        new THREE.CylinderGeometry(0.13, 0.1, 0.42, 5),
-        darkClothMat,
-        0x161824,
-        0x27293d,
-        0xe86a17
-      );
+      const spike = createFacetedMesh(new THREE.ConeGeometry(0.08, 0.28, 4), mAcc);
+      spike.position.set(isRight ? 0.18 : -0.18, 0.26, 0);
+      armGroup.add(spike);
+
+      const bicep = createFacetedMesh(new THREE.CylinderGeometry(0.13, 0.1, 0.42, 5), mDark);
       bicep.position.y = -0.22;
       armGroup.add(bicep);
 
-      const elbow = createDetailedMesh(
-        new THREE.BoxGeometry(0.12, 0.12, 0.12),
-        armorMat,
-        0x27293d,
-        0x8f2526,
-        0xe86a17
-      );
+      const elbow = createFacetedMesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), mSec);
       elbow.position.set(0, -0.44, -0.06);
       armGroup.add(elbow);
 
-      const forearm = createDetailedMesh(
-        new THREE.CylinderGeometry(0.12, 0.09, 0.4, 5),
-        armorMat,
-        0x8f2526,
-        0x27293d,
-        0xe86a17
-      );
+      const forearm = createFacetedMesh(new THREE.CylinderGeometry(0.12, 0.09, 0.4, 5), mPri);
       forearm.position.y = -0.64;
       armGroup.add(forearm);
+
+      const hand = createFacetedMesh(new THREE.IcosahedronGeometry(0.09, 0), mSec);
+      hand.position.set(0, -0.86, 0.04);
+      armGroup.add(hand);
     };
     createArm(leftArm, false);
     createArm(rightArm, true);
@@ -370,42 +251,18 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     weaponGroup.rotation.x = Math.PI / 4;
     rightArm.add(weaponGroup);
 
-    const hilt = createDetailedMesh(
-      new THREE.CylinderGeometry(0.035, 0.035, 0.65, 5),
-      darkClothMat,
-      0x161824,
-      0x27293d,
-      0xe86a17
-    );
+    const hilt = createFacetedMesh(new THREE.CylinderGeometry(0.035, 0.035, 0.65, 5), mDark);
     weaponGroup.add(hilt);
 
-    const guard = createDetailedMesh(
-      new THREE.BoxGeometry(0.44, 0.08, 0.12),
-      armorMat,
-      0x27293d,
-      0x8f2526,
-      0xe86a17
-    );
+    const guard = createFacetedMesh(new THREE.BoxGeometry(0.44, 0.08, 0.12), mSec);
     guard.position.y = 0.28;
     weaponGroup.add(guard);
 
-    const blade = createDetailedMesh(
-      new THREE.BoxGeometry(0.24, 1.5, 0.05),
-      bladeSteelMat,
-      0x8f2526,
-      0x27293d,
-      0xe86a17
-    );
+    const blade = createFacetedMesh(new THREE.BoxGeometry(0.24, 1.5, 0.05), mPri);
     blade.position.y = 1.05;
     weaponGroup.add(blade);
 
-    const fullerCore = createDetailedMesh(
-      new THREE.BoxGeometry(0.06, 1.3, 0.07),
-      cinderGlowMat,
-      0xe86a17,
-      0xfef08a,
-      0xffffff
-    );
+    const fullerCore = createFacetedMesh(new THREE.BoxGeometry(0.06, 1.3, 0.07), mAcc);
     fullerCore.position.y = 1.05;
     weaponGroup.add(fullerCore);
 
@@ -414,87 +271,31 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
   // Cosmic Astrolabe Staff & Floating Tiara/Shards
   // ==========================================
   } else if (heroId === 'arcanist') {
-    const robeMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'cloth',
-        primaryHex: 0x4e2661,
-        secondaryHex: 0x160a29,
-        accentHex: 0x9f75e8,
-        roughness: 0.88,
-        metalness: 0.08,
-        flatShading: true,
-      })
-    );
-    const trimMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'cloth',
-        primaryHex: 0x160a29,
-        secondaryHex: 0x0c0517,
-        accentHex: 0x9f75e8,
-        roughness: 0.85,
-        metalness: 0.12,
-        flatShading: true,
-      })
-    );
-    const crystalMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'crystal',
-        primaryHex: 0x9f75e8,
-        secondaryHex: 0x4e2661,
-        accentHex: 0xf3e8ff,
-        emissiveHex: 0x9f75e8,
-        emissiveIntensity: 0.65,
-        roughness: 0.55,
-        metalness: 0.2,
-        flatShading: true,
-      })
-    );
+    const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.88, 0.08));
+    const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.9, 0.05));
+    const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.52, 0.2, def.accentColor, 0.5));
 
     // Lower Robe Drape (Majestic cloth silhouette concealing legs)
     const robeGeo = new THREE.ConeGeometry(0.72, 1.05, 7);
-    const robe = createDetailedMesh(
-      robeGeo,
-      robeMat,
-      0x160a29,
-      0x4e2661,
-      0x9f75e8
-    );
+    const robe = createFacetedMesh(robeGeo, mPri);
     robe.position.y = 0.72;
     robe.scale.set(1.05, 1.0, 0.9);
     bodyGroup.add(robe);
 
     // Torso & Waist
-    const waist = createDetailedMesh(
-      new THREE.CylinderGeometry(0.32, 0.35, 0.32, 6),
-      trimMat,
-      0x160a29,
-      0x4e2661,
-      0x9f75e8
-    );
+    const waist = createFacetedMesh(new THREE.CylinderGeometry(0.32, 0.35, 0.32, 6), mSec);
     waist.position.y = 1.35;
     bodyGroup.add(waist);
 
-    const chest = createDetailedMesh(
-      new THREE.ConeGeometry(0.46, 0.45, 6),
-      robeMat,
-      0x160a29,
-      0x4e2661,
-      0x9f75e8
-    );
+    const chest = createFacetedMesh(new THREE.ConeGeometry(0.46, 0.45, 6), mPri);
     chest.position.y = 1.72;
     chest.rotation.x = Math.PI;
     bodyGroup.add(chest);
 
     // Floating Cosmic Orbital Shards in extraGroup
     extraGroup.position.set(0, 1.95, 0);
-    for (const sx of [-0.68, 0.68]) {
-      const shard = createDetailedMesh(
-        new THREE.OctahedronGeometry(0.18, 0),
-        crystalMat,
-        0x9f75e8,
-        0xf3e8ff,
-        0xffffff
-      );
+    for (const sx of [-0.72, 0.72]) {
+      const shard = createFacetedMesh(new THREE.OctahedronGeometry(0.18, 0), mAcc);
       shard.position.set(sx, 0, 0);
       shard.scale.set(0.7, 1.5, 0.7);
       extraGroup.add(shard);
@@ -502,33 +303,15 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
 
     // Cosmic Cowl Head
     headGroup.position.set(0, 2.3, 0);
-    const cowl = createDetailedMesh(
-      new THREE.ConeGeometry(0.38, 0.68, 6),
-      robeMat,
-      0x160a29,
-      0x4e2661,
-      0x9f75e8
-    );
+    const cowl = createFacetedMesh(new THREE.ConeGeometry(0.38, 0.68, 6), mSec);
     cowl.position.set(0, 0.04, -0.04);
     headGroup.add(cowl);
 
-    const shadowFace = createDetailedMesh(
-      new THREE.IcosahedronGeometry(0.18, 0),
-      trimMat,
-      0x0c0517,
-      0x160a29,
-      0x4e2661
-    );
+    const shadowFace = createFacetedMesh(new THREE.IcosahedronGeometry(0.18, 0), mDark);
     shadowFace.position.set(0, 0.0, 0.1);
     headGroup.add(shadowFace);
 
-    const tiara = createDetailedMesh(
-      new THREE.OctahedronGeometry(0.12, 0),
-      crystalMat,
-      0x9f75e8,
-      0xf3e8ff,
-      0xffffff
-    );
+    const tiara = createFacetedMesh(new THREE.OctahedronGeometry(0.12, 0), mAcc);
     tiara.position.set(0, 0.24, 0.22);
     headGroup.add(tiara);
 
@@ -536,23 +319,11 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     leftArm.position.set(-0.56, 1.75, 0);
     rightArm.position.set(0.56, 1.75, 0);
 
-    const lSleeve = createDetailedMesh(
-      new THREE.ConeGeometry(0.24, 0.72, 6),
-      robeMat,
-      0x160a29,
-      0x4e2661,
-      0x9f75e8
-    );
+    const lSleeve = createFacetedMesh(new THREE.ConeGeometry(0.24, 0.72, 6), mPri);
     lSleeve.position.y = -0.36;
     leftArm.add(lSleeve);
 
-    const rSleeve = createDetailedMesh(
-      new THREE.ConeGeometry(0.24, 0.72, 6),
-      robeMat,
-      0x160a29,
-      0x4e2661,
-      0x9f75e8
-    );
+    const rSleeve = createFacetedMesh(new THREE.ConeGeometry(0.24, 0.72, 6), mPri);
     rSleeve.position.y = -0.36;
     rightArm.add(rSleeve);
 
@@ -560,33 +331,15 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     weaponGroup.position.set(0.15, -0.2, 0.2);
     rightArm.add(weaponGroup);
 
-    const staffShaft = createDetailedMesh(
-      new THREE.CylinderGeometry(0.03, 0.03, 2.0, 6),
-      trimMat,
-      0x160a29,
-      0x4e2661,
-      0x9f75e8
-    );
+    const staffShaft = createFacetedMesh(new THREE.CylinderGeometry(0.03, 0.03, 2.0, 6), mSec);
     weaponGroup.add(staffShaft);
 
-    const gyroRing = createDetailedMesh(
-      new THREE.TorusGeometry(0.28, 0.025, 4, 8),
-      robeMat,
-      0x4e2661,
-      0x9f75e8,
-      0xf3e8ff
-    );
+    const gyroRing = createFacetedMesh(new THREE.TorusGeometry(0.28, 0.025, 4, 8), mPri);
     gyroRing.position.y = 0.98;
     gyroRing.rotation.x = Math.PI / 3;
     weaponGroup.add(gyroRing);
 
-    const catalystOrb = createDetailedMesh(
-      new THREE.OctahedronGeometry(0.15, 0),
-      crystalMat,
-      0x9f75e8,
-      0xf3e8ff,
-      0xffffff
-    );
+    const catalystOrb = createFacetedMesh(new THREE.OctahedronGeometry(0.15, 0), mAcc);
     catalystOrb.position.y = 0.98;
     weaponGroup.add(catalystOrb);
 
@@ -595,50 +348,12 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
   // Recurve Longbow, Split Cape & Quiver
   // ==========================================
   } else if (heroId === 'ranger') {
-    const leatherMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'leather',
-        primaryHex: 0x238276,
-        secondaryHex: 0x1f3842,
-        accentHex: 0x8be0bd,
-        roughness: 0.85,
-        metalness: 0.08,
-        flatShading: true,
-      })
-    );
-    const forestDarkMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'cloth',
-        primaryHex: 0x1f3842,
-        secondaryHex: 0x122229,
-        accentHex: 0x8be0bd,
-        roughness: 0.88,
-        metalness: 0.05,
-        flatShading: true,
-      })
-    );
-    const windGlowMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'crystal',
-        primaryHex: 0x8be0bd,
-        secondaryHex: 0x238276,
-        accentHex: 0xffffff,
-        emissiveHex: 0x8be0bd,
-        emissiveIntensity: 0.55,
-        roughness: 0.6,
-        metalness: 0.1,
-        flatShading: true,
-      })
-    );
+    const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.85, 0.08));
+    const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.88, 0.05));
+    const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.55, 0.15, def.accentColor, 0.4));
 
     // Pelvis & Legs
-    const pelvis = createDetailedMesh(
-      new THREE.CylinderGeometry(0.34, 0.28, 0.26, 6),
-      forestDarkMat,
-      0x122229,
-      0x1f3842,
-      0x238276
-    );
+    const pelvis = createFacetedMesh(new THREE.CylinderGeometry(0.34, 0.28, 0.26, 6), mSec);
     pelvis.position.y = 1.15;
     pelvis.scale.set(1.05, 1.0, 0.75);
     bodyGroup.add(pelvis);
@@ -647,33 +362,15 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     rightLeg.position.set(0.28, 1.05, 0);
 
     const createHunterLeg = (legGroup: THREE.Group) => {
-      const thigh = createDetailedMesh(
-        new THREE.CylinderGeometry(0.14, 0.11, 0.44, 5),
-        forestDarkMat,
-        0x122229,
-        0x1f3842,
-        0x8be0bd
-      );
+      const thigh = createFacetedMesh(new THREE.CylinderGeometry(0.14, 0.11, 0.44, 5), mDark);
       thigh.position.y = -0.22;
       legGroup.add(thigh);
 
-      const calf = createDetailedMesh(
-        new THREE.CylinderGeometry(0.12, 0.09, 0.42, 5),
-        leatherMat,
-        0x1f3842,
-        0x238276,
-        0x8be0bd
-      );
+      const calf = createFacetedMesh(new THREE.CylinderGeometry(0.12, 0.09, 0.42, 5), mPri);
       calf.position.y = -0.66;
       legGroup.add(calf);
 
-      const boot = createDetailedMesh(
-        new THREE.BoxGeometry(0.16, 0.14, 0.3),
-        leatherMat,
-        0x122229,
-        0x1f3842,
-        0x238276
-      );
+      const boot = createFacetedMesh(new THREE.BoxGeometry(0.16, 0.14, 0.3), mSec);
       boot.position.set(0, -0.92, 0.06);
       legGroup.add(boot);
     };
@@ -681,60 +378,36 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     createHunterLeg(rightLeg);
 
     // Lean Torso & Split Wind Cape
-    const torso = createDetailedMesh(
-      new THREE.ConeGeometry(0.45, 0.72, 6),
-      leatherMat,
-      0x1f3842,
-      0x238276,
-      0x8be0bd
-    );
+    const torso = createFacetedMesh(new THREE.ConeGeometry(0.45, 0.72, 6), mPri);
     torso.position.y = 1.62;
     torso.rotation.x = Math.PI;
     torso.scale.set(1.05, 1.0, 0.75);
     bodyGroup.add(torso);
 
-    const cape = createDetailedMesh(
-      new THREE.BoxGeometry(0.44, 0.95, 0.04),
-      forestDarkMat,
-      0x122229,
-      0x1f3842,
-      0x238276
-    );
+    const cape = createFacetedMesh(new THREE.BoxGeometry(0.44, 0.95, 0.04), mSec);
     cape.position.set(0, 1.35, -0.24);
     cape.rotation.x = 0.18;
     extraGroup.add(cape);
 
     // Diagonal Quiver with fletched arrows
-    const quiver = createDetailedMesh(
-      new THREE.CylinderGeometry(0.09, 0.08, 0.68, 5),
-      leatherMat,
-      0x122229,
-      0x1f3842,
-      0x238276
-    );
+    const quiver = createFacetedMesh(new THREE.CylinderGeometry(0.09, 0.08, 0.68, 5), mSec);
     quiver.position.set(0.18, 1.75, -0.24);
     quiver.rotation.z = -0.35;
     quiver.rotation.x = 0.25;
     extraGroup.add(quiver);
 
+    for (const aOff of [-0.04, 0.04]) {
+      const fletch = createFacetedMesh(new THREE.ConeGeometry(0.03, 0.2, 3), mAcc);
+      fletch.position.set(0.24 + aOff, 2.15, -0.32);
+      extraGroup.add(fletch);
+    }
+
     // Scout Hood & Eagle Feather
     headGroup.position.set(0, 2.28, 0);
-    const hood = createDetailedMesh(
-      new THREE.CylinderGeometry(0.18, 0.34, 0.44, 6),
-      leatherMat,
-      0x1f3842,
-      0x238276,
-      0x8be0bd
-    );
+    const hood = createFacetedMesh(new THREE.CylinderGeometry(0.18, 0.34, 0.44, 6), mPri);
     headGroup.add(hood);
 
-    const feather = createDetailedMesh(
-      new THREE.ConeGeometry(0.05, 0.45, 3),
-      windGlowMat,
-      0x8be0bd,
-      0xffffff,
-      0xffffff
-    );
+    const feather = createFacetedMesh(new THREE.ConeGeometry(0.05, 0.45, 3), mAcc);
     feather.position.set(-0.25, 0.22, -0.05);
     feather.rotation.z = Math.PI / 4;
     headGroup.add(feather);
@@ -743,36 +416,18 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     leftArm.position.set(-0.58, 1.75, 0);
     rightArm.position.set(0.58, 1.75, 0);
 
-    const archerGuard = createDetailedMesh(
-      new THREE.BoxGeometry(0.28, 0.26, 0.26),
-      leatherMat,
-      0x1f3842,
-      0x238276,
-      0x8be0bd
-    );
+    const archerGuard = createFacetedMesh(new THREE.BoxGeometry(0.28, 0.26, 0.26), mSec);
     leftArm.add(archerGuard);
 
     // Recurve Composite Bow in left hand
     weaponGroup.position.set(0, -0.65, 0.25);
     leftArm.add(weaponGroup);
 
-    const bowShaft = createDetailedMesh(
-      new THREE.TorusGeometry(0.68, 0.032, 4, 10, Math.PI),
-      leatherMat,
-      0x1f3842,
-      0x238276,
-      0x8be0bd
-    );
+    const bowShaft = createFacetedMesh(new THREE.TorusGeometry(0.68, 0.032, 4, 10, Math.PI), mPri);
     bowShaft.rotation.z = Math.PI / 2;
     weaponGroup.add(bowShaft);
 
-    const bowString = createDetailedMesh(
-      new THREE.CylinderGeometry(0.008, 0.008, 1.32, 3),
-      windGlowMat,
-      0x8be0bd,
-      0xffffff,
-      0xffffff
-    );
+    const bowString = createFacetedMesh(new THREE.CylinderGeometry(0.008, 0.008, 1.32, 3), mAcc);
     bowString.position.x = -0.06;
     weaponGroup.add(bowString);
 
@@ -781,50 +436,12 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
   // Twin Reverse-Grip Trench Daggers & Scarf Tail
   // ==========================================
   } else if (heroId === 'wraith') {
-    const stealthMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'leather',
-        primaryHex: 0x1c1c20,
-        secondaryHex: 0x0f0f12,
-        accentHex: 0xe6004c,
-        roughness: 0.82,
-        metalness: 0.18,
-        flatShading: true,
-      })
-    );
-    const maroonMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'cloth',
-        primaryHex: 0x3d0c13,
-        secondaryHex: 0x1c1c20,
-        accentHex: 0xe6004c,
-        roughness: 0.86,
-        metalness: 0.08,
-        flatShading: true,
-      })
-    );
-    const neonCrimsonMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'blade',
-        primaryHex: 0xe6004c,
-        secondaryHex: 0x3d0c13,
-        accentHex: 0xffffff,
-        emissiveHex: 0xe6004c,
-        emissiveIntensity: 0.75,
-        roughness: 0.65,
-        metalness: 0.25,
-        flatShading: true,
-      })
-    );
+    const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.82, 0.18));
+    const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.86, 0.08));
+    const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.5, 0.25, def.accentColor, 0.6));
 
     // Slim Shinobi Torso
-    const torso = createDetailedMesh(
-      new THREE.CylinderGeometry(0.38, 0.3, 0.68, 6),
-      stealthMat,
-      0x0f0f12,
-      0x1c1c20,
-      0x3d0c13
-    );
+    const torso = createFacetedMesh(new THREE.CylinderGeometry(0.38, 0.3, 0.68, 6), mPri);
     torso.position.y = 1.48;
     torso.scale.set(1.05, 1.0, 0.75);
     bodyGroup.add(torso);
@@ -834,13 +451,7 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     rightLeg.position.set(0.25, 1.05, 0);
 
     const createNinjaLeg = (legGroup: THREE.Group) => {
-      const legMesh = createDetailedMesh(
-        new THREE.CylinderGeometry(0.13, 0.09, 0.82, 5),
-        stealthMat,
-        0x0f0f12,
-        0x1c1c20,
-        0xe6004c
-      );
+      const legMesh = createFacetedMesh(new THREE.CylinderGeometry(0.13, 0.09, 0.82, 5), mPri);
       legMesh.position.y = -0.42;
       legGroup.add(legMesh);
     };
@@ -849,46 +460,22 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
 
     // Ninja Mask & Dual Slit Neon Crimson Optics
     headGroup.position.set(0, 2.26, 0);
-    const mask = createDetailedMesh(
-      new THREE.IcosahedronGeometry(0.25, 0),
-      stealthMat,
-      0x0f0f12,
-      0x1c1c20,
-      0x3d0c13
-    );
+    const mask = createFacetedMesh(new THREE.IcosahedronGeometry(0.25, 0), mDark);
     headGroup.add(mask);
 
-    const scarf = createDetailedMesh(
-      new THREE.TorusGeometry(0.25, 0.07, 4, 6),
-      maroonMat,
-      0x1c1c20,
-      0x3d0c13,
-      0xe6004c
-    );
+    const scarf = createFacetedMesh(new THREE.TorusGeometry(0.25, 0.07, 4, 6), mSec);
     scarf.rotation.x = Math.PI / 2;
     scarf.position.y = -0.18;
     headGroup.add(scarf);
 
-    const scarfTail = createDetailedMesh(
-      new THREE.BoxGeometry(0.12, 0.45, 0.04),
-      maroonMat,
-      0x1c1c20,
-      0x3d0c13,
-      0xe6004c
-    );
+    const scarfTail = createFacetedMesh(new THREE.BoxGeometry(0.12, 0.45, 0.04), mSec);
     scarfTail.position.set(0.22, -0.32, -0.26);
     scarfTail.rotation.x = 0.55;
     scarfTail.rotation.z = -0.35;
     headGroup.add(scarfTail);
 
     for (const ex of [-0.08, 0.08]) {
-      const optic = createDetailedMesh(
-        new THREE.BoxGeometry(0.07, 0.02, 0.03),
-        neonCrimsonMat,
-        0xe6004c,
-        0xffffff,
-        0xffffff
-      );
+      const optic = createFacetedMesh(new THREE.BoxGeometry(0.07, 0.02, 0.03), mAcc);
       optic.position.set(ex, 0.02, 0.24);
       headGroup.add(optic);
     }
@@ -899,25 +486,13 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
 
     const daggerGeoL = new THREE.ConeGeometry(0.08, 0.65, 4);
     daggerGeoL.rotateX(-Math.PI * 0.85);
-    const daggerL = createDetailedMesh(
-      daggerGeoL,
-      neonCrimsonMat,
-      0x3d0c13,
-      0xe6004c,
-      0xffffff
-    );
+    const daggerL = createFacetedMesh(daggerGeoL, mAcc);
     daggerL.position.set(0, -0.68, 0.1);
     leftArm.add(daggerL);
 
     const daggerGeoR = new THREE.ConeGeometry(0.08, 0.65, 4);
     daggerGeoR.rotateX(-Math.PI * 0.85);
-    const daggerR = createDetailedMesh(
-      daggerGeoR,
-      neonCrimsonMat,
-      0x3d0c13,
-      0xe6004c,
-      0xffffff
-    );
+    const daggerR = createFacetedMesh(daggerGeoR, mAcc);
     daggerR.position.set(0, -0.68, 0.1);
     rightArm.add(daggerR);
 
@@ -926,62 +501,17 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
   // Monolithic Boulder Head, Tower Shield & Hammer
   // ==========================================
   } else {
-    const rockMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'stone',
-        primaryHex: 0x4f483d,
-        secondaryHex: 0x262c22,
-        accentHex: 0xd4b35d,
-        roughness: 0.92,
-        metalness: 0.05,
-        flatShading: true,
-      })
-    );
-    const mossStoneMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'stone',
-        primaryHex: 0x262c22,
-        secondaryHex: 0x1b1713,
-        accentHex: 0xd4b35d,
-        roughness: 0.94,
-        metalness: 0.04,
-        flatShading: true,
-      })
-    );
-    const runeGoldMat = registerMat(
-      createDetailedPbrMaterial({
-        pattern: 'crystal',
-        primaryHex: 0xd4b35d,
-        secondaryHex: 0x4f483d,
-        accentHex: 0xffffff,
-        emissiveHex: 0xd4b35d,
-        emissiveIntensity: 0.58,
-        roughness: 0.72,
-        metalness: 0.15,
-        flatShading: true,
-      })
-    );
+    const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.92, 0.05));
+    const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.94, 0.04));
+    const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.65, 0.15, def.accentColor, 0.45));
 
     // Hulking Basalt Torso & Hunchback Crag
-    const torso = createDetailedMesh(
-      new THREE.DodecahedronGeometry(0.85, 0),
-      rockMat,
-      0x1b1713,
-      0x4f483d,
-      0xd4b35d
-    );
+    const torso = createFacetedMesh(new THREE.DodecahedronGeometry(0.85, 0), mPri);
     torso.position.y = 1.62;
     torso.scale.set(1.25, 1.1, 0.95);
-    torso.castShadow = true;
     bodyGroup.add(torso);
 
-    const crag = createDetailedMesh(
-      new THREE.IcosahedronGeometry(0.48, 0),
-      mossStoneMat,
-      0x1b1713,
-      0x262c22,
-      0x4f483d
-    );
+    const crag = createFacetedMesh(new THREE.IcosahedronGeometry(0.48, 0), mSec);
     crag.position.set(0, 1.82, -0.32);
     crag.scale.set(1.2, 0.9, 1.0);
     bodyGroup.add(crag);
@@ -991,23 +521,11 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     rightLeg.position.set(0.46, 0.9, 0);
 
     const createRockLeg = (legGroup: THREE.Group) => {
-      const leg = createDetailedMesh(
-        new THREE.CylinderGeometry(0.22, 0.18, 0.78, 5),
-        rockMat,
-        0x1b1713,
-        0x4f483d,
-        0x262c22
-      );
+      const leg = createFacetedMesh(new THREE.CylinderGeometry(0.22, 0.18, 0.78, 5), mPri);
       leg.position.y = -0.38;
       legGroup.add(leg);
 
-      const boot = createDetailedMesh(
-        new THREE.BoxGeometry(0.28, 0.22, 0.42),
-        mossStoneMat,
-        0x1b1713,
-        0x262c22,
-        0xd4b35d
-      );
+      const boot = createFacetedMesh(new THREE.BoxGeometry(0.28, 0.22, 0.42), mSec);
       boot.position.set(0, -0.84, 0.08);
       legGroup.add(boot);
     };
@@ -1016,32 +534,14 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
 
     // Monolithic Head
     headGroup.position.set(0, 2.32, 0.12);
-    const head = createDetailedMesh(
-      new THREE.BoxGeometry(0.54, 0.5, 0.48),
-      rockMat,
-      0x262c22,
-      0x4f483d,
-      0xd4b35d
-    );
+    const head = createFacetedMesh(new THREE.BoxGeometry(0.54, 0.5, 0.48), mPri);
     headGroup.add(head);
 
-    const brow = createDetailedMesh(
-      new THREE.BoxGeometry(0.56, 0.14, 0.18),
-      mossStoneMat,
-      0x1b1713,
-      0x262c22,
-      0xd4b35d
-    );
+    const brow = createFacetedMesh(new THREE.BoxGeometry(0.56, 0.14, 0.18), mSec);
     brow.position.set(0, 0.14, 0.26);
     headGroup.add(brow);
 
-    const runeEyes = createDetailedMesh(
-      new THREE.BoxGeometry(0.42, 0.06, 0.06),
-      runeGoldMat,
-      0xd4b35d,
-      0xffffff,
-      0xffffff
-    );
+    const runeEyes = createFacetedMesh(new THREE.BoxGeometry(0.42, 0.06, 0.06), mAcc);
     runeEyes.position.set(0, 0.02, 0.28);
     headGroup.add(runeEyes);
 
@@ -1049,43 +549,19 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     leftArm.position.set(-0.95, 1.88, 0);
     rightArm.position.set(0.95, 1.88, 0);
 
-    const lPauldron = createDetailedMesh(
-      new THREE.BoxGeometry(0.52, 0.48, 0.48),
-      rockMat,
-      0x262c22,
-      0x4f483d,
-      0xd4b35d
-    );
+    const lPauldron = createFacetedMesh(new THREE.BoxGeometry(0.52, 0.48, 0.48), mPri);
     leftArm.add(lPauldron);
 
-    const rPauldron = createDetailedMesh(
-      new THREE.BoxGeometry(0.52, 0.48, 0.48),
-      rockMat,
-      0x262c22,
-      0x4f483d,
-      0xd4b35d
-    );
+    const rPauldron = createFacetedMesh(new THREE.BoxGeometry(0.52, 0.48, 0.48), mPri);
     rightArm.add(rPauldron);
 
     // Massive Fortress Tower Shield on Left Arm
-    const shield = createDetailedMesh(
-      new THREE.BoxGeometry(0.8, 1.45, 0.18),
-      mossStoneMat,
-      0x1b1713,
-      0x262c22,
-      0xd4b35d
-    );
+    const shield = createFacetedMesh(new THREE.BoxGeometry(0.8, 1.45, 0.18), mSec);
     shield.position.set(0, -0.38, 0.38);
     shield.rotation.y = 0.15;
     leftArm.add(shield);
 
-    const shieldBoss = createDetailedMesh(
-      new THREE.OctahedronGeometry(0.24, 0),
-      runeGoldMat,
-      0xd4b35d,
-      0xffffff,
-      0xffffff
-    );
+    const shieldBoss = createFacetedMesh(new THREE.OctahedronGeometry(0.24, 0), mAcc);
     shieldBoss.position.set(0, -0.38, 0.52);
     leftArm.add(shieldBoss);
 
@@ -1094,22 +570,10 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     weaponGroup.rotation.x = -0.65;
     rightArm.add(weaponGroup);
 
-    const shaft = createDetailedMesh(
-      new THREE.CylinderGeometry(0.06, 0.06, 1.35, 5),
-      mossStoneMat,
-      0x1b1713,
-      0x262c22,
-      0x4f483d
-    );
+    const shaft = createFacetedMesh(new THREE.CylinderGeometry(0.06, 0.06, 1.35, 5), mSec);
     weaponGroup.add(shaft);
 
-    const hammerHead = createDetailedMesh(
-      new THREE.BoxGeometry(0.44, 0.35, 0.35),
-      rockMat,
-      0x262c22,
-      0x4f483d,
-      0xd4b35d
-    );
+    const hammerHead = createFacetedMesh(new THREE.BoxGeometry(0.44, 0.35, 0.35), mPri);
     hammerHead.position.y = 0.68;
     weaponGroup.add(hammerHead);
   }
