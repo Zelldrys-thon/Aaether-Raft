@@ -1715,6 +1715,7 @@ export function buildMobaArenaMap(renderer: THREE.WebGLRenderer): ArenaMapObject
   );
   group.add(ambientParticles);
 
+  let treeUpdateCounter = 0;
   const update = (dt: number, elapsed: number) => {
     // Water flow with uneven speed ("air tidak mengalir sempurna" while staying clearly water)
     const flowSpeed = 0.22 + Math.sin(elapsed * 1.4) * 0.1;
@@ -1729,19 +1730,23 @@ export function buildMobaArenaMap(renderer: THREE.WebGLRenderer): ArenaMapObject
     (livingRiftVortex.material as THREE.MeshBasicMaterial).opacity =
       0.74 + Math.sin(elapsed * 2.4) * 0.16;
 
-    for (let i = 0; i < treeTransforms.length; i++) {
-      const tr = treeTransforms[i];
-      const windSwayZ = Math.sin(elapsed * 1.45 + tr.phase) * 0.048;
-      const windSwayX = Math.cos(elapsed * 1.15 + tr.phase) * 0.032;
-      const breathY = tr.scale * (1 + Math.sin(elapsed * 1.8 + tr.phase) * 0.025);
+    // Throttle instanced tree matrix updates to every 4th frame (15 Hz) to eliminate mobile GPU bus stalls
+    treeUpdateCounter++;
+    if (treeUpdateCounter % 4 === 0) {
+      for (let i = 0; i < treeTransforms.length; i++) {
+        const tr = treeTransforms[i];
+        const windSwayZ = Math.sin(elapsed * 1.45 + tr.phase) * 0.048;
+        const windSwayX = Math.cos(elapsed * 1.15 + tr.phase) * 0.032;
+        const breathY = tr.scale * (1 + Math.sin(elapsed * 1.8 + tr.phase) * 0.025);
 
-      dummy.position.set(tr.x, 0, tr.z);
-      dummy.rotation.set(windSwayX, tr.rotY, windSwayZ);
-      dummy.scale.set(tr.scale, breathY, tr.scale);
-      dummy.updateMatrix();
-      swayingTreesInst.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(tr.x, 0, tr.z);
+        dummy.rotation.set(windSwayX, tr.rotY, windSwayZ);
+        dummy.scale.set(tr.scale, breathY, tr.scale);
+        dummy.updateMatrix();
+        swayingTreesInst.setMatrixAt(i, dummy.matrix);
+      }
+      swayingTreesInst.instanceMatrix.needsUpdate = true;
     }
-    swayingTreesInst.instanceMatrix.needsUpdate = true;
 
     const ringPulse = 0.52 + Math.sin(elapsed * 2.5) * 0.18;
     for (let i = 0; i < baseRings.length; i++) {

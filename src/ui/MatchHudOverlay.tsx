@@ -19,9 +19,7 @@ import { soundEngine } from '../audio/soundEngine';
 interface MatchHudOverlayProps {
   snapshot: MatchSnapshot;
   settings: GameSettings;
-  isPaused: boolean;
   onUpdateSettings: (s: GameSettings) => void;
-  onTogglePause: () => void;
   onOpenSettings: () => void;
   onBasicAttack: () => void;
   onCastSkill: (slot: SkillSlotIndex) => void;
@@ -173,9 +171,7 @@ const TacticalItemIconSvg: React.FC<{
 export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
   snapshot,
   settings,
-  isPaused,
   onUpdateSettings,
-  onTogglePause,
   onOpenSettings,
   onBasicAttack,
   onCastSkill,
@@ -201,6 +197,7 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
   onReturnToLobby,
 }) => {
   const [isShopOpen, setIsShopOpen] = useState(false);
+  const [showAfkModal, setShowAfkModal] = useState(false);
   const [shopTab, setShopTab] = useState<'elixirs' | 'deployables' | 'gear'>('elixirs');
   const [joyKnob, setJoyKnob] = useState({ x: 0, y: 0 });
   const joyBaseRef = useRef<HTMLDivElement | null>(null);
@@ -327,20 +324,20 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
               style={{
                 transform: `translate3d(${Math.round(hb.screenX - widthPx / 2)}px, ${Math.round(
                   hb.screenY
-                )}px, 0)`,
+                )}px, 0) translateY(-100%)`,
                 width: `${widthPx}px`,
               }}
-              className="absolute top-0 left-0 flex flex-col items-center"
+              className="absolute top-0 left-0 flex flex-col items-center pointer-events-none pb-1"
             >
-              {/* Status Badges above HP Bar (Stealth or Infused Deployable Reaction State) */}
+              {/* Status Badges above HP Bar */}
               {hb.stealthed && (
-                <div className="mb-0.5 px-1.5 py-0 text-[9px] font-mono-tabular font-extrabold tracking-wider bg-violet-950/95 text-violet-200 border border-violet-400/70 rounded">
-                  STEALTH · INVISIBLE
+                <div className="mb-0.5 px-1 py-0 text-[8px] font-mono-tabular font-bold bg-[#141a26] text-amber-300 border border-[#b45309]">
+                  STEALTH
                 </div>
               )}
               {deployableBadge && (
                 <div
-                  className={`mb-0.5 px-1.5 py-0 text-[9px] font-mono-tabular font-extrabold tracking-wider border rounded whitespace-nowrap ${deployableBadge.bg} ${deployableBadge.text}`}
+                  className={`mb-0.5 px-1 py-0 text-[8px] font-mono-tabular font-bold border whitespace-nowrap ${deployableBadge.bg} ${deployableBadge.text}`}
                 >
                   {deployableBadge.label}
                 </div>
@@ -349,17 +346,15 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
               {isMajor && (
                 <div className="flex items-center gap-1 mb-0.5 whitespace-nowrap">
                   {hb.type === 'hero' && (
-                    <span className="px-1 py-0 text-[10px] font-mono-tabular font-bold bg-[#0b0f17] text-amber-400 border border-[#2a364f] rounded">
+                    <span className="px-1 py-0 text-[9px] font-mono-tabular font-bold bg-[#0e131d] text-amber-300 border border-[#334155]">
                       {hb.level}
                     </span>
                   )}
                   <span
-                    className={`text-[10px] font-semibold px-1 rounded ${
+                    className={`text-[9px] font-semibold px-1 bg-[#0e131d] border ${
                       hb.isPlayer
-                        ? 'bg-[#0b0f17] text-emerald-300 border border-emerald-500/40'
-                        : hb.type === 'deployable'
-                          ? 'bg-[#0b0f17]/92 text-purple-200 border border-purple-500/40'
-                          : 'bg-[#0b0f17]/90 text-slate-100'
+                        ? 'text-amber-300 border-[#b45309]'
+                        : 'text-slate-200 border-[#334155]'
                     }`}
                   >
                     {hb.name}
@@ -369,8 +364,8 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
 
               {/* HP Bar */}
               <div
-                className={`w-full bg-[#0b0f17] border border-[#1e293b] rounded-sm overflow-hidden ${
-                  hb.isPlayer ? 'h-2.5' : isMajor ? 'h-2' : 'h-1.5'
+                className={`w-full bg-[#0a0d14] border border-[#334155] overflow-hidden ${
+                  hb.isPlayer ? 'h-2' : isMajor ? 'h-1.5' : 'h-1'
                 }`}
               >
                 <div
@@ -381,17 +376,17 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
 
               {/* Mana Bar (for Heroes) */}
               {hb.type === 'hero' && hb.maxMana > 0 && (
-                <div className="w-full h-1 bg-[#0b0f17] border border-t-0 border-[#1e293b] overflow-hidden">
+                <div className="w-full h-1 bg-[#0a0d14] border border-t-0 border-[#334155] overflow-hidden">
                   <div
                     style={{ width: `${manaPct}%` }}
-                    className="h-full bg-sky-400 transition-none"
+                    className="h-full bg-slate-400 transition-none"
                   />
                 </div>
               )}
 
               {/* Shield Bar */}
               {hb.shield > 0 && (
-                <div className="w-full h-1 bg-amber-300 mt-0.5 rounded-sm" />
+                <div className="w-full h-1 bg-amber-400 mt-0.5" />
               )}
             </div>
           );
@@ -513,32 +508,35 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
         <span className="text-[11px] sm:text-xs font-bold text-rose-400">{snapshot.enemyKills}</span>
       </div>
 
-      {/* Top-Right: Shop Button, Camera Lock/Free & Settings/Pause (No camera zoom HUD) */}
+      {/* Top-Right: Shop Button, Camera Lock/Free, Settings, & AFK Exit */}
       <div className="fixed top-2 sm:top-3 right-2 sm:right-3 z-30 pointer-events-auto flex items-center gap-1.5 sm:gap-2">
-        {/* Dedicated Prominent Gold Shop Button in Top-Right */}
+        {/* Dedicated Gold Shop Button with multi-touch pointerDown */}
         <button
-          onClick={() => {
+          onPointerDown={(e) => {
+            e.stopPropagation();
             soundEngine.playUiClick();
             setIsShopOpen((prev) => !prev);
           }}
-          className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 bg-[#0b0f17]/96 hover:bg-[#151c28] border-2 border-amber-400 hover:border-amber-300 rounded-xl shadow-2xl text-amber-300 font-display font-bold text-[10px] sm:text-xs tracking-wider transition-all active:scale-95 cursor-pointer min-h-[30px] sm:min-h-[36px]"
+          className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 bg-[#b45309] hover:bg-[#d97706] border-t border-l border-t-[#f59e0b] border-l-[#f59e0b] border-b border-r border-b-[#451a03] border-r-[#451a03] text-white font-display font-bold text-[10px] sm:text-xs tracking-wider transition-all cursor-pointer min-h-[30px] sm:min-h-[34px]"
           title="Buka Toko Item & Elixir (Gold Shop)"
         >
-          <span className="flex items-center justify-center w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-amber-400/20 text-[10px] sm:text-xs shrink-0">
+          <span className="flex items-center justify-center w-4 h-4 sm:w-4.5 sm:h-4.5 bg-[#451a03] text-[9px] sm:text-[10px] shrink-0">
             🛒
           </span>
           <div className="flex flex-col text-left leading-none">
-            <span className="text-[9px] sm:text-[11px] font-bold text-white uppercase">
+            <span className="text-[9px] sm:text-[10px] font-bold text-white uppercase">
               SHOP
             </span>
-            <span className="text-[8.5px] sm:text-[10px] font-mono-tabular text-amber-400 font-bold mt-0.5">
+            <span className="text-[8.5px] sm:text-[9.5px] font-mono-tabular text-amber-200 font-bold mt-0.5">
               {snapshot.player.gold}g
             </span>
           </div>
         </button>
 
+        {/* Camera Toggle Button */}
         <button
-          onClick={() => {
+          onPointerDown={(e) => {
+            e.stopPropagation();
             soundEngine.playUiClick();
             if (settings.cameraLocked) {
               onUpdateSettings({ ...settings, cameraLocked: false });
@@ -547,96 +545,107 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
               onCenterCamera();
             }
           }}
-          className={`min-h-[30px] sm:min-h-[36px] px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-semibold rounded-xl border transition-colors cursor-pointer ${
+          className={`min-h-[30px] sm:min-h-[34px] px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-semibold cursor-pointer border-t border-l border-b border-r ${
             settings.cameraLocked
-              ? 'bg-[#0b0f17]/94 text-emerald-300 border-emerald-500/50'
-              : 'bg-[#0b0f17]/94 text-amber-300 border-amber-500/60'
+              ? 'bg-[#141a26] text-amber-300 border-t-[#475569] border-l-[#475569] border-b-[#0b0f17] border-r-[#0b0f17]'
+              : 'bg-[#1e2637] text-white border-t-[#64748b] border-l-[#64748b] border-b-[#0b0f17] border-r-[#0b0f17]'
           }`}
           title="Toggle Kamera Mengikuti Hero atau Geser/Scroll Bebas"
         >
-          {settings.cameraLocked ? 'Lock' : 'Free'}
+          {settings.cameraLocked ? 'Cam: Lock' : 'Cam: Free'}
         </button>
 
+        {/* Settings Button */}
         <button
-          onClick={() => {
+          onPointerDown={(e) => {
+            e.stopPropagation();
             soundEngine.playUiClick();
             onOpenSettings();
           }}
-          className="min-h-[30px] sm:min-h-[36px] px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-semibold text-slate-200 bg-[#0b0f17]/94 hover:bg-[#151c28] border border-[#2a364f] rounded-xl cursor-pointer"
+          className="min-h-[30px] sm:min-h-[34px] px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-semibold text-slate-200 bg-[#141a26] hover:bg-[#1a2232] border-t border-l border-t-[#475569] border-l-[#475569] border-b border-r border-b-[#0b0f17] border-r-[#0b0f17] cursor-pointer"
           title="Pengaturan"
         >
           ⚙
         </button>
 
+        {/* AFK / Kembali ke Lobby Button */}
         <button
-          onClick={() => {
+          onPointerDown={(e) => {
+            e.stopPropagation();
             soundEngine.playUiClick();
-            onTogglePause();
+            setShowAfkModal(true);
           }}
-          className="min-h-[30px] sm:min-h-[36px] px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-semibold text-amber-300 bg-[#0b0f17]/94 hover:bg-[#151c28] border border-[#2a364f] rounded-xl cursor-pointer"
-          title="Pause / Lanjutkan"
+          className="min-h-[30px] sm:min-h-[34px] px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-bold text-amber-400 hover:text-white bg-[#141a26] hover:bg-[#78350f] border-t border-l border-t-[#475569] border-l-[#475569] border-b border-r border-b-[#0b0f17] border-r-[#0b0f17] cursor-pointer"
+          title="Tinggalkan Pertandingan (AFK) dan Kembali ke Lobby"
         >
-          ⏸
+          Lobby (AFK)
         </button>
       </div>
 
-      {/* Expanded Sanctum Armory (Gold Shop: Elixirs, Deployable Objects, & Hero Gear) - Compact Mobile/PC */}
+      {/* Expanded Sanctum Armory (Gold Shop) - Low-Poly Semi-3D */}
       {isShopOpen && (
-        <div className="fixed top-12 sm:top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-auto w-[295px] sm:w-[325px] max-w-[94vw] bg-[#0b0f17]/96 border border-[#2a364f] rounded-xl p-2 sm:p-2.5 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-[#2a364f] pb-1.5 mb-1.5">
+        <div className="fixed top-12 sm:top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-auto w-[295px] sm:w-[325px] max-w-[94vw] bg-[#121722] border-t-2 border-l-2 border-b-2 border-r-2 border-t-[#475569] border-l-[#475569] border-b-[#0a0d14] border-r-[#0a0d14] p-2 sm:p-2.5 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-[#242e42] pb-1.5 mb-1.5">
             <div className="flex items-center gap-1.5">
-              <span className="font-display text-[10px] sm:text-[11px] font-bold text-white tracking-wide">
+              <span className="font-display text-[10px] sm:text-[11px] font-bold text-white tracking-wide uppercase">
                 SANCTUM ARMORY
               </span>
-              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-mono-tabular font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded">
+              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-mono-tabular font-bold bg-[#1a2232] text-amber-300 border border-[#b45309]">
                 {snapshot.player.gold}g
               </span>
             </div>
             <button
-              onClick={() => setIsShopOpen(false)}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                soundEngine.playUiClick();
+                setIsShopOpen(false);
+              }}
               className="text-[10px] sm:text-xs text-slate-400 hover:text-white cursor-pointer px-1.5 py-0.5"
             >
-              Tutup ✕
+              Tutup [✕]
             </button>
           </div>
 
           {/* 3 Category Tabs: Elixirs | Deployable Objects | Hero Gear */}
-          <div className="grid grid-cols-3 gap-1 mb-2 bg-[#111722] p-0.5 rounded-lg border border-[#1e293b]">
+          <div className="grid grid-cols-3 gap-1 mb-2 bg-[#0c1017] p-0.5 border border-[#242e42]">
             <button
-              onClick={() => {
+              onPointerDown={(e) => {
+                e.stopPropagation();
                 soundEngine.playUiClick();
                 setShopTab('elixirs');
               }}
-              className={`py-1 text-[9px] sm:text-[10px] font-bold rounded transition-colors cursor-pointer ${
+              className={`py-1 text-[9px] sm:text-[10px] font-bold cursor-pointer border-t border-l border-b border-r ${
                 shopTab === 'elixirs'
-                  ? 'bg-amber-500 text-slate-950'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#b45309] text-white border-t-[#d97706] border-l-[#d97706] border-b-[#451a03] border-r-[#451a03]'
+                  : 'bg-[#141a26] text-slate-300 hover:text-white border-t-[#334155] border-l-[#334155] border-b-[#0a0d14] border-r-[#0a0d14]'
               }`}
             >
               Elixir (1-4)
             </button>
             <button
-              onClick={() => {
+              onPointerDown={(e) => {
+                e.stopPropagation();
                 soundEngine.playUiClick();
                 setShopTab('deployables');
               }}
-              className={`py-1 text-[9px] sm:text-[10px] font-bold rounded transition-colors cursor-pointer ${
+              className={`py-1 text-[9px] sm:text-[10px] font-bold cursor-pointer border-t border-l border-b border-r ${
                 shopTab === 'deployables'
-                  ? 'bg-amber-500 text-slate-950'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#b45309] text-white border-t-[#d97706] border-l-[#d97706] border-b-[#451a03] border-r-[#451a03]'
+                  : 'bg-[#141a26] text-slate-300 hover:text-white border-t-[#334155] border-l-[#334155] border-b-[#0a0d14] border-r-[#0a0d14]'
               }`}
             >
               Objek (Z-V)
             </button>
             <button
-              onClick={() => {
+              onPointerDown={(e) => {
+                e.stopPropagation();
                 soundEngine.playUiClick();
                 setShopTab('gear');
               }}
-              className={`py-1 text-[9px] sm:text-[10px] font-bold rounded transition-colors cursor-pointer ${
+              className={`py-1 text-[9px] sm:text-[10px] font-bold cursor-pointer border-t border-l border-b border-r ${
                 shopTab === 'gear'
-                  ? 'bg-amber-500 text-slate-950'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#b45309] text-white border-t-[#d97706] border-l-[#d97706] border-b-[#451a03] border-r-[#451a03]'
+                  : 'bg-[#141a26] text-slate-300 hover:text-white border-t-[#334155] border-l-[#334155] border-b-[#0a0d14] border-r-[#0a0d14]'
               }`}
             >
               Gear Stat
@@ -693,9 +702,12 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
                         {charges}/{item.maxCharges}
                       </span>
                       <button
-                        onClick={() => onBuyTacticalItem(id)}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          if (canAfford) onBuyTacticalItem(id);
+                        }}
                         disabled={!canAfford}
-                        className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-mono-tabular font-bold text-[9.5px] sm:text-[10.5px] rounded cursor-pointer"
+                        className="px-2 py-0.5 bg-[#b45309] hover:bg-[#d97706] disabled:bg-[#1a2232] disabled:text-slate-500 text-white font-mono-tabular font-bold text-[9px] sm:text-[10px] border-t border-l border-t-[#f59e0b] border-l-[#f59e0b] border-b border-r border-b-[#451a03] border-r-[#451a03] disabled:border-[#242e42] cursor-pointer"
                       >
                         {isFull ? 'MAX' : `${item.cost}g`}
                       </button>
@@ -760,9 +772,12 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
                         {charges}/{item.maxCharges}
                       </span>
                       <button
-                        onClick={() => onBuyTacticalItem(id)}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          if (canAfford) onBuyTacticalItem(id);
+                        }}
                         disabled={!canAfford}
-                        className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-mono-tabular font-bold text-[9.5px] sm:text-[10.5px] rounded cursor-pointer"
+                        className="px-2 py-0.5 bg-[#b45309] hover:bg-[#d97706] disabled:bg-[#1a2232] disabled:text-slate-500 text-white font-mono-tabular font-bold text-[9px] sm:text-[10px] border-t border-l border-t-[#f59e0b] border-l-[#f59e0b] border-b border-r border-b-[#451a03] border-r-[#451a03] disabled:border-[#242e42] cursor-pointer"
                       >
                         {isFull ? 'MAX' : `${item.cost}g`}
                       </button>
@@ -793,9 +808,12 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
                       <div className="text-[8.5px] sm:text-[9px] text-slate-400 truncate">{item.summary}</div>
                     </div>
                     <button
-                      onClick={() => onBuyShopItem(item.id)}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        if (canAfford) onBuyShopItem(item.id);
+                      }}
                       disabled={!canAfford}
-                      className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-mono-tabular font-bold text-[9.5px] sm:text-[10.5px] rounded cursor-pointer shrink-0"
+                      className="px-2 py-0.5 bg-[#b45309] hover:bg-[#d97706] disabled:bg-[#1a2232] disabled:text-slate-500 text-white font-mono-tabular font-bold text-[9px] sm:text-[10px] border-t border-l border-t-[#f59e0b] border-l-[#f59e0b] border-b border-r border-b-[#451a03] border-r-[#451a03] disabled:border-[#242e42] cursor-pointer shrink-0"
                     >
                       {item.cost}g
                     </button>
@@ -1311,81 +1329,104 @@ export const MatchHudOverlay: React.FC<MatchHudOverlayProps> = ({
         </button>
       </div>
 
-      {/* 7. Pause OR Victory / Defeat Modal */}
-      {(isPaused || snapshot.winner) && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-4 pointer-events-auto">
-          <div className="w-full max-w-sm bg-[#0b0f17] border border-[#2a364f] rounded-xl p-6 text-center shadow-2xl">
+      {/* 7. Victory / Defeat Modal (Online MOBA finishes when a Base Core is destroyed) */}
+      {snapshot.winner && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4 pointer-events-auto select-none">
+          <div className="w-full max-w-sm bg-[#121722] border-t-2 border-l-2 border-b-2 border-r-2 border-t-[#475569] border-l-[#475569] border-b-[#0a0d14] border-r-[#0a0d14] p-5 text-center shadow-2xl">
             <h2
-              className={`font-display text-2xl font-bold mb-2 ${
+              className={`font-display text-2xl font-bold mb-2 tracking-widest ${
                 snapshot.winner === 'ally'
                   ? 'text-amber-400'
-                  : snapshot.winner === 'enemy'
-                    ? 'text-rose-400'
-                    : 'text-white'
+                  : 'text-slate-300'
               }`}
             >
-              {snapshot.winner === 'ally'
-                ? 'VICTORY'
-                : snapshot.winner === 'enemy'
-                  ? 'DEFEAT'
-                  : 'PAUSED'}
+              {snapshot.winner === 'ally' ? 'VICTORY' : 'DEFEAT'}
             </h2>
 
-            <div className="grid grid-cols-3 gap-2 bg-[#151c28] border border-[#2a364f] rounded-lg p-3 my-4 font-mono-tabular text-xs">
+            <div className="grid grid-cols-3 gap-2 bg-[#0c1017] border border-[#242e42] p-2.5 my-3 font-mono-tabular text-xs">
               <div>
-                <div className="text-slate-400">Time</div>
+                <div className="text-slate-400 text-[10px]">WAKTU</div>
                 <div className="font-bold text-white">{formatTime(snapshot.matchTime)}</div>
               </div>
               <div>
-                <div className="text-slate-400">K / D / A</div>
-                <div className="font-bold text-emerald-400">
+                <div className="text-slate-400 text-[10px]">K / D / A</div>
+                <div className="font-bold text-amber-300">
                   {snapshot.player.kills}/{snapshot.player.deaths}/{snapshot.player.assists}
                 </div>
               </div>
               <div>
-                <div className="text-slate-400">Level</div>
-                <div className="font-bold text-amber-400">Lv.{snapshot.player.level}</div>
+                <div className="text-slate-400 text-[10px]">LEVEL</div>
+                <div className="font-bold text-slate-200">Lv.{snapshot.player.level}</div>
               </div>
             </div>
 
             <div className="space-y-2">
-              {!snapshot.winner && (
-                <button
-                  onClick={() => {
-                    soundEngine.playUiClick();
-                    onTogglePause();
-                  }}
-                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
-                >
-                  Resume
-                </button>
-              )}
               <button
-                onClick={() => {
+                onPointerDown={(e) => {
+                  e.stopPropagation();
                   soundEngine.playUiClick();
                   onRestartMatch();
                 }}
-                className="w-full py-2.5 bg-[#151c28] hover:bg-[#1e293b] text-slate-100 font-semibold text-xs border border-[#2a364f] rounded-lg cursor-pointer"
+                className="w-full py-2 bg-[#b45309] hover:bg-[#d97706] text-white font-bold text-xs uppercase tracking-wider border-t border-l border-t-[#f59e0b] border-l-[#f59e0b] border-b border-r border-b-[#451a03] border-r-[#451a03] cursor-pointer"
               >
-                Restart Match
+                Main Lagi
               </button>
               <button
-                onClick={() => {
+                onPointerDown={(e) => {
+                  e.stopPropagation();
                   soundEngine.playUiClick();
                   onReturnToPick();
                 }}
-                className="w-full py-2.5 bg-[#151c28] hover:bg-[#1e293b] text-slate-200 font-semibold text-xs border border-[#2a364f] rounded-lg cursor-pointer"
+                className="w-full py-2 bg-[#161d2a] hover:bg-[#1f293a] text-slate-200 font-semibold text-xs border border-[#334155] cursor-pointer"
               >
-                Back to Pick
+                Pilih Hero / Mode
               </button>
               <button
-                onClick={() => {
+                onPointerDown={(e) => {
+                  e.stopPropagation();
                   soundEngine.playUiClick();
                   onReturnToLobby();
                 }}
-                className="w-full py-2.5 bg-[#151c28] hover:bg-[#1e293b] text-slate-400 font-semibold text-xs border border-[#2a364f] rounded-lg cursor-pointer"
+                className="w-full py-2 bg-[#161d2a] hover:bg-[#1f293a] text-slate-400 hover:text-white font-semibold text-xs border border-[#334155] cursor-pointer"
               >
-                Back to Lobby
+                Kembali ke Lobby
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. AFK / Kembali ke Lobby Confirmation Modal */}
+      {showAfkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 pointer-events-auto select-none">
+          <div className="w-full max-w-xs bg-[#121722] border-t-2 border-l-2 border-b-2 border-r-2 border-t-[#b45309] border-l-[#b45309] border-b-[#0a0d14] border-r-[#0a0d14] p-4 text-center shadow-2xl">
+            <h3 className="font-display text-sm font-bold text-amber-400 uppercase tracking-wider mb-1.5">
+              Tinggalkan Pertandingan?
+            </h3>
+            <p className="text-[11px] text-slate-300 mb-4 leading-relaxed">
+              Pertandingan online tetap berjalan. Keluar sekarang akan dicatat sebagai AFK dan kembali ke lobby utama.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  soundEngine.playUiClick();
+                  setShowAfkModal(false);
+                  onReturnToLobby();
+                }}
+                className="flex-1 py-2 bg-[#b45309] hover:bg-[#d97706] text-white font-bold text-xs uppercase tracking-wider border-t border-l border-t-[#f59e0b] border-l-[#f59e0b] border-b border-r border-b-[#451a03] border-r-[#451a03] cursor-pointer"
+              >
+                Keluar (AFK)
+              </button>
+              <button
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  soundEngine.playUiClick();
+                  setShowAfkModal(false);
+                }}
+                className="flex-1 py-2 bg-[#161d2a] text-slate-300 border border-[#334155] font-bold text-xs cursor-pointer"
+              >
+                Batal
               </button>
             </div>
           </div>

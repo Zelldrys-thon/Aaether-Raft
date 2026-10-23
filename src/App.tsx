@@ -164,7 +164,6 @@ export default function App() {
   );
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
 
   const [settings, setSettings] = useState<GameSettings>(() => {
     const isTouchDevice =
@@ -255,7 +254,6 @@ export default function App() {
   };
 
   const handleNavigateScreen = (nextScreen: GameScreen) => {
-    setIsPaused(false);
     if (nextScreen === 'pick') {
       // Always start Page 2 on Mode Selection & 5-Player Lobby
       setPickStep('mode');
@@ -328,13 +326,7 @@ export default function App() {
         <MatchHudOverlay
           snapshot={snapshot}
           settings={settings}
-          isPaused={isPaused}
           onUpdateSettings={handleUpdateSettings}
-          onTogglePause={() => {
-            const next = !isPaused;
-            setIsPaused(next);
-            engineRef.current?.setPaused(next);
-          }}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onBasicAttack={() => engineRef.current?.triggerPlayerBasicAttack()}
           onCastSkill={(slot) => engineRef.current?.triggerPlayerSkill(slot)}
@@ -364,7 +356,6 @@ export default function App() {
           onResetCameraZoom={() => engineRef.current?.resetCameraZoom()}
           onJoystickMove={(dx, dy) => engineRef.current?.setVirtualJoystick(dx, dy)}
           onRestartMatch={() => {
-            setIsPaused(false);
             engineRef.current?.startNewMatch();
           }}
           onReturnToPick={() => handleNavigateScreen('pick')}
@@ -378,6 +369,11 @@ export default function App() {
           settings={settings}
           onChange={handleUpdateSettings}
           onClose={() => setIsSettingsOpen(false)}
+          isInMatch={screen === 'games'}
+          onReturnToLobby={() => {
+            setIsSettingsOpen(false);
+            handleNavigateScreen('lobby');
+          }}
         />
       )}
 

@@ -697,55 +697,53 @@ export const HeroSelectOverlay: React.FC<HeroSelectOverlayProps> = ({
       : null;
 
   // ==========================================================================
-  // HALAMAN 2A: PILIH MODE (UNLIMITED CAROUSEL: TENGAH TERANG & BESAR, KIRI/KANAN GELAP & KECIL)
+  // HALAMAN 2A: PILIH MODE (LOW-POLY SEMI-3D COMPACT CAROUSEL)
   // ==========================================================================
   if (pickStep === 'mode') {
     const relativeOffsets = [-2, -1, 0, 1, 2];
-    const cardSpacing = isCompactMobile ? 96 : isMobile ? 122 : 210;
+    const cardSpacing = isCompactMobile ? 74 : isMobile ? 96 : 148;
 
     return (
       <div
         onWheel={handleCarouselWheel}
-        className="fixed inset-0 z-10 pointer-events-auto bg-[#05080d]/90 backdrop-blur-md flex flex-col justify-between p-2 sm:p-4 md:p-6 select-none overflow-hidden"
+        className="fixed inset-0 z-10 pointer-events-auto bg-[#0a0e16]/95 flex flex-col justify-between p-2.5 sm:p-4 select-none overflow-hidden"
       >
         {/* Top Bar: Compact Back Button & Title */}
         <div className="flex items-center justify-between gap-2 shrink-0">
           <button
-            onClick={() => {
+            onPointerDown={(e) => {
+              e.stopPropagation();
               soundEngine.playUiClick();
               onBackToLobby();
             }}
-            className="min-h-[28px] sm:min-h-[36px] px-2 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold text-slate-200 bg-[#0b0f17] hover:bg-[#151c28] border border-[#2a364f] rounded-lg transition-colors cursor-pointer"
+            className="min-h-[26px] sm:min-h-[32px] px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold text-slate-200 bg-[#141a26] hover:bg-[#1a2232] border-t border-l border-t-[#475569] border-l-[#475569] border-b border-r border-b-[#0b0f17] border-r-[#0b0f17] cursor-pointer"
           >
             ← Kembali
           </button>
 
           <div className="text-center">
-            <h1 className="font-display text-sm sm:text-xl font-bold text-white tracking-widest leading-tight">
+            <h1 className="font-display text-sm sm:text-base font-bold text-white tracking-widest leading-tight">
               PILIH MODE
             </h1>
-            <span className="text-[8px] sm:text-[10px] text-slate-400 font-mono-tabular">
-              Geser kartu atau tekan tombol mode
-            </span>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-[#0b0f17] border border-[#2a364f] rounded-lg px-2.5 py-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="text-[10px] sm:text-xs font-bold text-white truncate max-w-[80px] sm:max-w-none">
+          <div className="flex items-center gap-1.5 bg-[#141a26] border border-[#2d3748] px-2.5 py-1">
+            <span className="w-1.5 h-1.5 bg-amber-400" />
+            <span className="text-[10px] sm:text-xs font-bold text-slate-200 truncate max-w-[80px] sm:max-w-none">
               {profile.nickname}
             </span>
           </div>
         </div>
 
-        {/* Center: Carousel with Left & Right Arrow Buttons */}
-        <div className="relative flex-1 flex items-center justify-center w-full overflow-hidden my-1 sm:my-2">
+        {/* Center: Compact Low-Poly Carousel with Left & Right Arrow Buttons */}
+        <div className="relative flex-1 flex items-center justify-center w-full overflow-hidden my-1">
           {/* Left Arrow Button */}
           <button
-            onClick={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
               shiftCarouselBy(-1);
             }}
-            className="absolute left-1 sm:left-4 z-40 w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-[#0b0f17]/90 hover:bg-[#151c28] border border-amber-400/50 hover:border-amber-400 text-amber-300 flex items-center justify-center text-xs sm:text-sm font-bold transition-all shadow-lg cursor-pointer active:scale-90"
+            className="absolute left-1 sm:left-4 z-40 w-7 h-7 sm:w-8 sm:h-8 bg-[#141a26] hover:bg-[#1a2232] border-t border-l border-t-[#475569] border-l-[#475569] border-b border-r border-b-[#0b0f17] border-r-[#0b0f17] text-amber-300 flex items-center justify-center text-xs font-bold cursor-pointer"
             title="Geser Kiri"
           >
             ◀
@@ -753,11 +751,11 @@ export const HeroSelectOverlay: React.FC<HeroSelectOverlayProps> = ({
 
           {/* Right Arrow Button */}
           <button
-            onClick={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
               shiftCarouselBy(1);
             }}
-            className="absolute right-1 sm:right-4 z-40 w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-[#0b0f17]/90 hover:bg-[#151c28] border border-amber-400/50 hover:border-amber-400 text-amber-300 flex items-center justify-center text-xs sm:text-sm font-bold transition-all shadow-lg cursor-pointer active:scale-90"
+            className="absolute right-1 sm:right-4 z-40 w-7 h-7 sm:w-8 sm:h-8 bg-[#141a26] hover:bg-[#1a2232] border-t border-l border-t-[#475569] border-l-[#475569] border-b border-r border-b-[#0b0f17] border-r-[#0b0f17] text-amber-300 flex items-center justify-center text-xs font-bold cursor-pointer"
             title="Geser Kanan"
           >
             ▶
@@ -769,7 +767,7 @@ export const HeroSelectOverlay: React.FC<HeroSelectOverlayProps> = ({
             onPointerMove={handleCarouselPointerMove}
             onPointerUp={handleCarouselPointerUp}
             onPointerCancel={handleCarouselPointerUp}
-            className="relative w-full max-w-4xl h-[175px] sm:h-[260px] md:h-[310px] flex items-center justify-center cursor-grab active:cursor-grabbing touch-pan-y"
+            className="relative w-full max-w-2xl h-[145px] sm:h-[190px] md:h-[225px] flex items-center justify-center cursor-grab active:cursor-grabbing touch-pan-y"
           >
             {relativeOffsets.map((rel) => {
               const virtualIndex = carouselIndex + rel;
@@ -779,21 +777,22 @@ export const HeroSelectOverlay: React.FC<HeroSelectOverlayProps> = ({
               const isCenter = rel === 0;
               const isSide = Math.abs(rel) === 1;
 
-              // Calculate horizontal offset + live drag delta
               const baseTranslateX = rel * cardSpacing + dragDeltaX * 0.65;
-              const scale = isCenter ? (isMobile ? 1.0 : 1.08) : isSide ? (isMobile ? 0.68 : 0.74) : 0.48;
-              const opacity = isCenter ? 1 : isSide ? 0.45 : 0;
+              const scale = isCenter ? (isMobile ? 1.0 : 1.05) : isSide ? (isMobile ? 0.72 : 0.78) : 0.52;
+              const opacity = isCenter ? 1 : isSide ? 0.4 : 0;
               const zIndex = isCenter ? 30 : isSide ? 20 : 10;
 
               return (
                 <div
                   key={virtualIndex}
-                  onClick={() => {
+                  onPointerDown={(e) => {
                     if (Math.abs(dragDeltaX) > 12) return;
                     if (rel === 0) {
+                      e.stopPropagation();
                       soundEngine.playUiClick();
                       onChangePickStep('room');
                     } else {
+                      e.stopPropagation();
                       shiftCarouselBy(rel);
                     }
                   }}
@@ -801,17 +800,18 @@ export const HeroSelectOverlay: React.FC<HeroSelectOverlayProps> = ({
                     transform: `translateX(${baseTranslateX}px) scale(${scale})`,
                     opacity,
                     zIndex,
-                    filter: isCenter ? 'brightness(1.15)' : 'brightness(0.35)',
-                    boxShadow: isCenter ? `0 12px 36px -8px ${card.glowColor}` : 'none',
+                    filter: isCenter ? 'none' : 'brightness(0.4)',
                   }}
-                  className={`absolute w-[105px] xs:w-[125px] sm:w-[180px] md:w-[230px] h-[142px] xs:h-[168px] sm:h-[220px] md:h-[280px] rounded-xl sm:rounded-2xl p-2 sm:p-4 bg-gradient-to-b ${
-                    card.accentBg
-                  } border-2 transition-all duration-300 ease-out flex flex-col items-center justify-between text-center cursor-pointer ${
-                    isCenter ? card.accentBorder : 'border-[#1e293b]'
+                  className={`absolute w-[86px] xs:w-[102px] sm:w-[136px] md:w-[164px] h-[116px] xs:h-[136px] sm:h-[168px] md:h-[200px] p-2 sm:p-3 bg-[#121722] border-t-2 border-l-2 border-b-2 border-r-2 transition-all duration-300 ease-out flex flex-col items-center justify-between text-center cursor-pointer ${
+                    isCenter
+                      ? 'border-t-[#d97706] border-l-[#d97706] border-b-[#451a03] border-r-[#451a03] bg-[#1a2232]'
+                      : 'border-t-[#334155] border-l-[#334155] border-b-[#0b0f17] border-r-[#0b0f17]'
                   }`}
                 >
                   <span
-                    className={`text-[7px] sm:text-[9px] font-mono-tabular font-bold px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-black/60 border border-white/10 ${card.accentText}`}
+                    className={`text-[7px] sm:text-[8px] font-mono-tabular font-bold px-1.5 py-0.5 bg-[#0b0f17] border border-[#2d3748] ${
+                      isCenter ? 'text-amber-300' : 'text-slate-400'
+                    }`}
                   >
                     {card.badge}
                   </span>
@@ -819,10 +819,10 @@ export const HeroSelectOverlay: React.FC<HeroSelectOverlayProps> = ({
                   <ModeEmblemSvg mode={card.id} isCenter={isCenter} />
 
                   <div>
-                    <h2 className="font-display text-xs sm:text-lg md:text-2xl font-bold text-white tracking-wider">
+                    <h2 className="font-display text-[11px] sm:text-sm md:text-base font-bold text-white tracking-wider">
                       {card.title}
                     </h2>
-                    <div className={`text-[8px] sm:text-[10px] md:text-xs font-semibold mt-0.5 ${card.accentText}`}>
+                    <div className="text-[8px] sm:text-[9px] font-semibold text-slate-400 mt-0.5">
                       {card.subtitle}
                     </div>
                   </div>
@@ -832,44 +832,15 @@ export const HeroSelectOverlay: React.FC<HeroSelectOverlayProps> = ({
           </div>
         </div>
 
-        {/* Quick Mode Switcher Chips & Bottom CTA */}
-        <div className="flex flex-col items-center gap-1.5 sm:gap-2 shrink-0 pb-1">
-          {/* Quick 1-Tap Mode Selector Chips */}
-          <div className="flex items-center justify-center gap-1.5 sm:gap-2">
-            {MODE_CARDS.map((m, idx) => {
-              const isCurrent = selectedMode === m.id;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => {
-                    soundEngine.playUiClick();
-                    onSelectMode(m.id);
-                    setCarouselIndex((prev) => {
-                      const currentWrapped =
-                        ((prev % MODE_CARDS.length) + MODE_CARDS.length) % MODE_CARDS.length;
-                      const diff = idx - currentWrapped;
-                      return prev + diff;
-                    });
-                  }}
-                  className={`min-h-[26px] sm:min-h-[32px] px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold uppercase transition-all cursor-pointer ${
-                    isCurrent
-                      ? 'bg-amber-400 text-slate-950 shadow-md ring-1 ring-amber-200'
-                      : 'bg-[#0b0f17]/90 text-slate-400 hover:text-white border border-[#2a364f]'
-                  }`}
-                >
-                  {m.title}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Bottom CTA Button: Enter Room Lobby */}
+        {/* Bottom CTA Button: Enter Room Lobby Directly */}
+        <div className="flex flex-col items-center shrink-0 pb-1 sm:pb-2">
           <button
-            onClick={() => {
+            onPointerDown={(e) => {
+              e.stopPropagation();
               soundEngine.playUiClick();
               onChangePickStep('room');
             }}
-            className="min-w-[130px] sm:min-w-[190px] py-1.5 sm:py-2 px-4 sm:px-8 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-display font-bold text-[10px] sm:text-xs md:text-sm tracking-wider rounded-lg sm:rounded-xl border border-amber-300 shadow-xl transition-all cursor-pointer whitespace-nowrap"
+            className="min-w-[140px] sm:min-w-[180px] py-2 px-6 bg-[#b45309] hover:bg-[#d97706] text-white font-display font-bold text-[10px] sm:text-xs tracking-wider border-t border-l border-t-[#f59e0b] border-l-[#f59e0b] border-b border-r border-b-[#451a03] border-r-[#451a03] cursor-pointer whitespace-nowrap"
           >
             MASUK LOBBY ({selectedMode.toUpperCase()}) →
           </button>

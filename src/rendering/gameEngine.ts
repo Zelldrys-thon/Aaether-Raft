@@ -191,6 +191,9 @@ export class MobaGameEngine {
   private lastPointerY = 0;
   private pinchStartDist = 0;
   private pinchStartZoom = 1.0;
+  private isMobileDevice = false;
+  private shadowTick = 0;
+  private separationTick = 0;
 
   private onSnapshot: (snapshot: MatchSnapshot) => void;
   private snapshotAccum = 0;
@@ -291,13 +294,47 @@ export class MobaGameEngine {
   }
 
   private updateRendererQuality() {
+    this.isMobileDevice =
+      typeof window !== 'undefined' &&
+      ('ontouchstart' in window ||
+        navigator.maxTouchPoints > 0 ||
+        /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+
     const q = this.settings.graphicsQuality;
-    const maxDpr = q === 'high' ? 2 : q === 'medium' ? 1.5 : 1;
+    // On high-DPI mobile screens (2.5x-3.5x DPR), cap to 1.15 (high), 1.0 (medium), or 0.85 (low)
+    // to prevent rendering over 2-4 million pixels per frame which causes severe stuttering.
+    const maxDpr = this.isMobileDevice
+      ? q === 'high'
+        ? 1.15
+        : q === 'medium'
+          ? 1.0
+          : 0.85
+      : q === 'high'
+        ? 2
+        : q === 'medium'
+          ? 1.5
+          : 1;
+
     this.renderer.setPixelRatio(
       this.isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, maxDpr)
     );
     this.renderer.shadowMap.enabled = !this.isSoftwareGl && q !== 'low';
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.isMobileDevice ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+    // On mobile, throttle shadow map updates to every 3rd frame to save GPU draw calls
+    this.renderer.shadowMap.autoUpdate = !this.isMobileDevice;
+
+    if (this.dirLight) {
+      const shadowRes = this.isMobileDevice
+        ? q === 'high'
+          ? 1024
+          : 512
+        : q === 'high'
+          ? 2048
+          : 1024;
+      this.dirLight.shadow.mapSize.width = shadowRes;
+      this.dirLight.shadow.mapSize.height = shadowRes;
+      this.dirLight.shadow.needsUpdate = true;
+    }
   }
 
   public updateSettings(newSettings: GameSettings) {
@@ -2611,6 +2648,14 @@ export class MobaGameEngine {
       const elapsed = this.clock.getElapsedTime();
 
       this.updateFrame(dt, elapsed);
+
+      if (this.isMobileDevice && this.renderer.shadowMap.enabled && this.screen === 'games') {
+        this.shadowTick = (this.shadowTick + 1) % 3;
+        if (this.shadowTick === 0) {
+          this.dirLight.shadow.needsUpdate = true;
+        }
+      }
+
       this.renderer.render(this.scene, this.camera);
 
       if (this.isSoftwareGl) {
@@ -2634,8 +2679,6 @@ export class MobaGameEngine {
       if (this.aimingSkillSlot !== null || this.aimingTacticalId !== null) {
         this.cancelSkillAim();
         this.cancelTacticalAim();
-      } else {
-        this.isPaused = !this.isPaused;
       }
     }
 
@@ -3168,6 +3211,22 @@ export class MobaGameEngine {
     maxRange: number,
     prioritizeMinions = false
   ): CombatEntity | null {
+    // Fast path: If unit already has a valid alive target within range, retain it (O(1) lookup)
+    if (source.targetEntityId) {
+      const existing = this.entities.find((e) => e.id === source.targetEntityId && e.alive);
+      if (existing) {
+        const dx = existing.x - source.x;
+        const dz = existing.z - source.z;
+        const distSq = dx * dx + dz * dz;
+        const retainRange = maxRange + 1.6;
+        if (distSq <= retainRange * retainRange && !(existing.stealthed && distSq > 5.29)) {
+          return existing;
+        }
+      }
+      source.targetEntityId = null;
+    }
+
+    const maxRangeSq = (maxRange + 1.8) * (maxRange + 1.8);
     let bestTarget: CombatEntity | null = null;
     let bestScore = Infinity;
 
@@ -3175,7 +3234,12 @@ export class MobaGameEngine {
       const other = this.entities[i];
       if (!other.alive || other.team === source.team || other.team === 'neutral') continue;
 
-      const dist = Math.hypot(other.x - source.x, other.z - source.z) - other.radius;
+      const dx = other.x - source.x;
+      const dz = other.z - source.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq > maxRangeSq) continue;
+
+      const dist = Math.sqrt(distSq) - other.radius;
       if (dist > maxRange) continue;
 
       // Stealthed heroes inside a Volt-Mirage Invisible Area cannot be auto-targeted unless within 2.3m!
@@ -3190,6 +3254,9 @@ export class MobaGameEngine {
       }
     }
 
+    if (bestTarget) {
+      source.targetEntityId = bestTarget.id;
+    }
     return bestTarget;
   }
 
@@ -3253,56 +3320,74 @@ export class MobaGameEngine {
   }
 
   private syncEntityVisualRig(ent: CombatEntity, elapsed: number) {
+    const dx = ent.x - this.camFocusX;
+    const dz = ent.z - this.camFocusZ;
+    // Beyond 54 units from camera center, units are offscreen or tiny silhouettes: skip limb sine math
+    const isFar = dx * dx + dz * dz > 2916;
+
     if (ent.type === 'hero') {
       const rig = this.heroRigs.get(ent.id);
       if (rig) {
         rig.root.position.set(ent.x, 0, ent.z);
         rig.root.rotation.y = ent.rotationY;
-        updateHeroRigAnimation(
-          rig,
-          ent.heroId!,
-          ent.animState,
-          ent.animState === 'idle' || ent.animState === 'walk' ? elapsed : ent.animTime,
-          ent.hitFlashTimer,
-          ent.shield > 0
-        );
+        if (!isFar || ent.isPlayer) {
+          updateHeroRigAnimation(
+            rig,
+            ent.heroId!,
+            ent.animState,
+            ent.animState === 'idle' || ent.animState === 'walk' ? elapsed : ent.animTime,
+            ent.hitFlashTimer,
+            ent.shield > 0
+          );
+        }
       }
     } else if (ent.type === 'minion') {
       const rig = this.minionRigs.get(ent.id);
       if (rig) {
         rig.root.position.set(ent.x, 0, ent.z);
         rig.root.rotation.y = ent.rotationY;
-        updateMinionRig(rig, ent.animState, ent.animTime, ent.hitFlashTimer);
+        if (!isFar) {
+          updateMinionRig(rig, ent.animState, ent.animTime, ent.hitFlashTimer);
+        }
       }
     } else if (ent.type === 'monster') {
       const rig = this.monsterRigs.get(ent.id);
       if (rig) {
         rig.root.position.set(ent.x, 0, ent.z);
         rig.root.rotation.y = ent.rotationY;
-        updateMonsterRig(rig, ent.animState, ent.animTime, ent.hitFlashTimer);
+        if (!isFar) {
+          updateMonsterRig(rig, ent.animState, ent.animTime, ent.hitFlashTimer);
+        }
       }
     }
   }
 
   private resolveUnitSeparation() {
+    this.separationTick++;
+    // Run unit separation physics every 2nd frame (30 Hz is optimal for soft crowd collision)
+    if (this.separationTick % 2 !== 0) return;
+
     for (let i = 0; i < this.entities.length; i++) {
       const a = this.entities[i];
       if (!a.alive || a.type === 'tower' || a.type === 'base' || a.type === 'deployable') continue;
 
       // 1. Physical pathing block from Cryo-Barrier Elixir Zones (Block Area)
-      for (let zIdx = 0; zIdx < this.activeElixirZones.length; zIdx++) {
-        const zone = this.activeElixirZones[zIdx];
-        if (zone.elixirId !== 'cryo_block') continue;
-        const dx = a.x - zone.x;
-        const dz = a.z - zone.z;
-        const dist = Math.hypot(dx, dz);
-        const blockRadius = zone.radius * 0.78 + a.radius;
-        if (dist < blockRadius) {
-          const push = blockRadius - Math.max(0.01, dist);
-          const nx = dist > 0.01 ? dx / dist : 1;
-          const nz = dist > 0.01 ? dz / dist : 0;
-          a.x += nx * push;
-          a.z += nz * push;
+      if (this.activeElixirZones.length > 0) {
+        for (let zIdx = 0; zIdx < this.activeElixirZones.length; zIdx++) {
+          const zone = this.activeElixirZones[zIdx];
+          if (zone.elixirId !== 'cryo_block') continue;
+          const dx = a.x - zone.x;
+          const dz = a.z - zone.z;
+          const blockRadius = zone.radius * 0.78 + a.radius;
+          const distSq = dx * dx + dz * dz;
+          if (distSq < blockRadius * blockRadius) {
+            const dist = Math.sqrt(distSq);
+            const push = blockRadius - Math.max(0.01, dist);
+            const nx = dist > 0.01 ? dx / dist : 1;
+            const nz = dist > 0.01 ? dz / dist : 0;
+            a.x += nx * push;
+            a.z += nz * push;
+          }
         }
       }
 
@@ -3316,9 +3401,10 @@ export class MobaGameEngine {
           if (b.deployableId === 'snap_trap') continue;
           const dx = a.x - b.x;
           const dz = a.z - b.z;
-          const dist = Math.hypot(dx, dz);
           const minDist = a.radius + b.radius;
-          if (dist < minDist) {
+          const distSq = dx * dx + dz * dz;
+          if (distSq < minDist * minDist) {
+            const dist = Math.sqrt(distSq);
             const overlap = minDist - Math.max(0.01, dist);
             const nx = dist > 0.01 ? dx / dist : 1;
             const nz = dist > 0.01 ? dz / dist : 0;
@@ -3331,9 +3417,10 @@ export class MobaGameEngine {
         if (j < i) continue;
         const dx = b.x - a.x;
         const dz = b.z - a.z;
-        const dist = Math.hypot(dx, dz);
         const minDist = (a.radius + b.radius) * 0.72;
-        if (dist > 0.001 && dist < minDist) {
+        const distSq = dx * dx + dz * dz;
+        if (distSq > 0.0001 && distSq < minDist * minDist) {
+          const dist = Math.sqrt(distSq);
           const overlap = (minDist - dist) * 0.35;
           const nx = dx / dist;
           const nz = dz / dist;
@@ -3697,16 +3784,17 @@ export class MobaGameEngine {
         isPlayer: ent.isPlayer,
       });
 
+      const zoomOffset = Math.max(0, (this.camZoom - 1.0) * 1.8);
       const yHeight =
         ent.type === 'base'
           ? 7.2
           : ent.type === 'tower'
             ? 7.2
             : ent.type === 'hero'
-              ? 3.45
+              ? 3.9 + zoomOffset
               : ent.type === 'monster'
-                ? 2.8
-                : 2.2;
+                ? 2.9 + zoomOffset * 0.5
+                : 2.25 + zoomOffset * 0.4;
 
       _projVec.set(ent.x, yHeight, ent.z);
       _projVec.project(this.camera);
@@ -3716,6 +3804,12 @@ export class MobaGameEngine {
       const sy = (-(_projVec.y * 0.5) + 0.5) * height;
 
       if (sx < -60 || sx > width + 60 || sy < -40 || sy > height + 40) continue;
+
+      // In MOBAs, full-HP minions don't need floating DOM health bars unless damaged or close to the player
+      if (ent.type === 'minion' && ent.hp >= ent.maxHp && ent.hitFlashTimer <= 0) {
+        const distToPlayer = player ? Math.hypot(ent.x - player.x, ent.z - player.z) : 999;
+        if (distToPlayer > 14) continue;
+      }
 
       healthBars.push({
         id: ent.id,
