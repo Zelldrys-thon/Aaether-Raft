@@ -1,0 +1,13 @@
+{
+	"appId": "com.aetheria.moba",
+	"appName": "Aetheria MOBA",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https",
+		"cleartext": true
+	},
+	"android": {
+		"allowMixedContent": true,
+		"backgroundColor": "#05080d"
+	}
+}
