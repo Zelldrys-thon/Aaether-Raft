@@ -1,4 +1,5 @@
 ﻿import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HeroAnimState, HeroId, TeamId } from '../types/game';
 import { HERO_DEFINITIONS } from './heroDefinitions';
 
@@ -17,8 +18,51 @@ export interface HeroRig {
   materialsToFlash: THREE.MeshStandardMaterial[];
 }
 
+const gltfLoader = new GLTFLoader();
+const heroGlbCache = new Map<HeroId, THREE.Group>();
+
 /**
- * Creates 1:1 identical faceted low-poly mesh matching Blender's shade_flat output
+ * Preload and cache Blender-exported GLB models directly
+ */
+export async function preloadHeroGlb(heroId: HeroId): Promise<THREE.Group> {
+  const cached = heroGlbCache.get(heroId);
+  if (cached) return cached.clone();
+
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(
+      /models/heroes/.glb,
+      (gltf) => {
+        const model = gltf.scene;
+        model.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+            if (mat) {
+              mat.flatShading = true;
+              mat.roughness = Math.max(0.8, mat.roughness ?? 0.85);
+            }
+          }
+        });
+        heroGlbCache.set(heroId, model);
+        resolve(model.clone());
+      },
+      undefined,
+      (err) => reject(err)
+    );
+  });
+}
+
+/**
+ * Preloads all 5 Blender exported hero models
+ */
+export async function preloadAllHeroGlbs(): Promise<void> {
+  const heroIds: HeroId[] = ['vanguard', 'arcanist', 'ranger', 'wraith', 'colossus'];
+  await Promise.allSettled(heroIds.map((id) => preloadHeroGlb(id)));
+}
+
+/**
+ * Creates 1:1 faceted low-poly mesh matching Blender's shade_flat output
  */
 function createFacetedMesh(geo: THREE.BufferGeometry, mat: THREE.Material): THREE.Mesh {
   const nonIndexedGeo = geo.toNonIndexed();
@@ -120,19 +164,46 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
   bodyGroup.add(rightLeg);
   bodyGroup.add(extraGroup);
 
-  // Common dark tone for flexible undersuit / joints
+  // Check if Blender GLB model is already in cache
+  const cachedGlb = heroGlbCache.get(heroId);
+  if (cachedGlb) {
+    const glbModel = cachedGlb.clone();
+    bodyGroup.add(glbModel);
+    glbModel.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        if (mat) registerMat(mat);
+      }
+    });
+  } else {
+    // Asynchronously fetch the exact Blender model into bodyGroup
+    preloadHeroGlb(heroId).then((model) => {
+      // Clear procedural fallback pieces and insert exact Blender model
+      while (bodyGroup.children.length > 0) {
+        bodyGroup.remove(bodyGroup.children[0]);
+      }
+      bodyGroup.add(model);
+      model.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+          if (mat) registerMat(mat);
+        }
+      });
+    }).catch(() => {
+      // Procedural fallback remains active seamlessly
+    });
+  }
+
+  // ========================================================
+  // PROCEDURAL FACETED MESHES (Synchronous fallback matching Blender)
+  // ========================================================
   const mDark = registerMat(createMatteMaterial(0x161822, 0.92, 0.02));
 
-  // ==========================================
-  // 1. VANGUARD: Ignis Valen (Fighter/Brawler)
-  // Two-Handed Executioner Claymore & Cinder Ember
-  // ==========================================
   if (heroId === 'vanguard') {
     const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.84, 0.15));
     const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.88, 0.08));
     const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.55, 0.22, def.accentColor, 0.45));
 
-    // Pelvis & Belt
     const pelvis = createFacetedMesh(new THREE.CylinderGeometry(0.38, 0.32, 0.28, 6), mSec);
     pelvis.position.y = 1.15;
     pelvis.scale.set(1.1, 1.0, 0.8);
@@ -147,7 +218,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     buckle.position.set(0, 1.28, 0.36);
     bodyGroup.add(buckle);
 
-    // Two-Stage Torso (Flexible Abdomen + Flaring Chest)
     const ab = createFacetedMesh(new THREE.CylinderGeometry(0.36, 0.33, 0.32, 6), mDark);
     ab.position.y = 1.45;
     ab.scale.set(1.05, 1.0, 0.75);
@@ -168,13 +238,11 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     coreGem.position.set(0, 1.84, 0.34);
     bodyGroup.add(coreGem);
 
-    // Collar Gorget
     const gorget = createFacetedMesh(new THREE.TorusGeometry(0.28, 0.06, 4, 6), mSec);
     gorget.rotation.x = Math.PI / 2;
     gorget.position.y = 2.06;
     bodyGroup.add(gorget);
 
-    // Articulated Legs
     leftLeg.position.set(-0.32, 1.05, 0);
     rightLeg.position.set(0.32, 1.05, 0);
 
@@ -199,7 +267,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     createLeg(leftLeg);
     createLeg(rightLeg);
 
-    // Head: Knight Greathelm with Cheekplates & Visor
     headGroup.position.set(0, 2.32, 0);
     const helm = createFacetedMesh(new THREE.BoxGeometry(0.42, 0.46, 0.42), mPri);
     headGroup.add(helm);
@@ -214,7 +281,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     visor.position.set(0, 0.02, 0.23);
     headGroup.add(visor);
 
-    // Spiked Pauldrons & Arms
     leftArm.position.set(-0.64, 1.82, 0);
     rightArm.position.set(0.64, 1.82, 0);
 
@@ -246,7 +312,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     createArm(leftArm, false);
     createArm(rightArm, true);
 
-    // Two-Handed Executioner Claymore
     weaponGroup.position.set(0.12, -0.65, 0.2);
     weaponGroup.rotation.x = Math.PI / 4;
     rightArm.add(weaponGroup);
@@ -266,23 +331,17 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     fullerCore.position.y = 1.05;
     weaponGroup.add(fullerCore);
 
-  // ==========================================
-  // 2. ARCANIST: Vespera (Mage/Burst)
-  // Cosmic Astrolabe Staff & Floating Tiara/Shards
-  // ==========================================
   } else if (heroId === 'arcanist') {
     const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.88, 0.08));
     const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.9, 0.05));
     const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.52, 0.2, def.accentColor, 0.5));
 
-    // Lower Robe Drape (Majestic cloth silhouette concealing legs)
     const robeGeo = new THREE.ConeGeometry(0.72, 1.05, 7);
     const robe = createFacetedMesh(robeGeo, mPri);
     robe.position.y = 0.72;
     robe.scale.set(1.05, 1.0, 0.9);
     bodyGroup.add(robe);
 
-    // Torso & Waist
     const waist = createFacetedMesh(new THREE.CylinderGeometry(0.32, 0.35, 0.32, 6), mSec);
     waist.position.y = 1.35;
     bodyGroup.add(waist);
@@ -292,7 +351,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     chest.rotation.x = Math.PI;
     bodyGroup.add(chest);
 
-    // Floating Cosmic Orbital Shards in extraGroup
     extraGroup.position.set(0, 1.95, 0);
     for (const sx of [-0.72, 0.72]) {
       const shard = createFacetedMesh(new THREE.OctahedronGeometry(0.18, 0), mAcc);
@@ -301,7 +359,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
       extraGroup.add(shard);
     }
 
-    // Cosmic Cowl Head
     headGroup.position.set(0, 2.3, 0);
     const cowl = createFacetedMesh(new THREE.ConeGeometry(0.38, 0.68, 6), mSec);
     cowl.position.set(0, 0.04, -0.04);
@@ -315,7 +372,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     tiara.position.set(0, 0.24, 0.22);
     headGroup.add(tiara);
 
-    // Sleeved Arms
     leftArm.position.set(-0.56, 1.75, 0);
     rightArm.position.set(0.56, 1.75, 0);
 
@@ -327,7 +383,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     rSleeve.position.y = -0.36;
     rightArm.add(rSleeve);
 
-    // Astrolabe Catalyst Staff
     weaponGroup.position.set(0.15, -0.2, 0.2);
     rightArm.add(weaponGroup);
 
@@ -343,16 +398,11 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     catalystOrb.position.y = 0.98;
     weaponGroup.add(catalystOrb);
 
-  // ==========================================
-  // 3. RANGER: Zephyr (Marksman/DPS)
-  // Recurve Longbow, Split Cape & Quiver
-  // ==========================================
   } else if (heroId === 'ranger') {
     const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.85, 0.08));
     const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.88, 0.05));
     const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.55, 0.15, def.accentColor, 0.4));
 
-    // Pelvis & Legs
     const pelvis = createFacetedMesh(new THREE.CylinderGeometry(0.34, 0.28, 0.26, 6), mSec);
     pelvis.position.y = 1.15;
     pelvis.scale.set(1.05, 1.0, 0.75);
@@ -377,7 +427,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     createHunterLeg(leftLeg);
     createHunterLeg(rightLeg);
 
-    // Lean Torso & Split Wind Cape
     const torso = createFacetedMesh(new THREE.ConeGeometry(0.45, 0.72, 6), mPri);
     torso.position.y = 1.62;
     torso.rotation.x = Math.PI;
@@ -389,7 +438,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     cape.rotation.x = 0.18;
     extraGroup.add(cape);
 
-    // Diagonal Quiver with fletched arrows
     const quiver = createFacetedMesh(new THREE.CylinderGeometry(0.09, 0.08, 0.68, 5), mSec);
     quiver.position.set(0.18, 1.75, -0.24);
     quiver.rotation.z = -0.35;
@@ -402,7 +450,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
       extraGroup.add(fletch);
     }
 
-    // Scout Hood & Eagle Feather
     headGroup.position.set(0, 2.28, 0);
     const hood = createFacetedMesh(new THREE.CylinderGeometry(0.18, 0.34, 0.44, 6), mPri);
     headGroup.add(hood);
@@ -412,14 +459,12 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     feather.rotation.z = Math.PI / 4;
     headGroup.add(feather);
 
-    // Arms: Asymmetrical archer shoulder guard
     leftArm.position.set(-0.58, 1.75, 0);
     rightArm.position.set(0.58, 1.75, 0);
 
     const archerGuard = createFacetedMesh(new THREE.BoxGeometry(0.28, 0.26, 0.26), mSec);
     leftArm.add(archerGuard);
 
-    // Recurve Composite Bow in left hand
     weaponGroup.position.set(0, -0.65, 0.25);
     leftArm.add(weaponGroup);
 
@@ -431,22 +476,16 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     bowString.position.x = -0.06;
     weaponGroup.add(bowString);
 
-  // ==========================================
-  // 4. WRAITH: Umbra (Assassin/Duelist)
-  // Twin Reverse-Grip Trench Daggers & Scarf Tail
-  // ==========================================
   } else if (heroId === 'wraith') {
     const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.82, 0.18));
     const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.86, 0.08));
     const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.5, 0.25, def.accentColor, 0.6));
 
-    // Slim Shinobi Torso
     const torso = createFacetedMesh(new THREE.CylinderGeometry(0.38, 0.3, 0.68, 6), mPri);
     torso.position.y = 1.48;
     torso.scale.set(1.05, 1.0, 0.75);
     bodyGroup.add(torso);
 
-    // Shinobi Legs
     leftLeg.position.set(-0.25, 1.05, 0);
     rightLeg.position.set(0.25, 1.05, 0);
 
@@ -458,7 +497,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     createNinjaLeg(leftLeg);
     createNinjaLeg(rightLeg);
 
-    // Ninja Mask & Dual Slit Neon Crimson Optics
     headGroup.position.set(0, 2.26, 0);
     const mask = createFacetedMesh(new THREE.IcosahedronGeometry(0.25, 0), mDark);
     headGroup.add(mask);
@@ -480,7 +518,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
       headGroup.add(optic);
     }
 
-    // Arms & Twin Reverse-Grip Trench Daggers
     leftArm.position.set(-0.55, 1.72, 0);
     rightArm.position.set(0.55, 1.72, 0);
 
@@ -496,19 +533,15 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     daggerR.position.set(0, -0.68, 0.1);
     rightArm.add(daggerR);
 
-  // ==========================================
-  // 5. COLOSSUS: Balthazar (Tank/Disrupter)
-  // Monolithic Boulder Head, Tower Shield & Hammer
-  // ==========================================
   } else {
     const mPri = registerMat(createMatteMaterial(def.primaryColor, 0.92, 0.05));
     const mSec = registerMat(createMatteMaterial(def.secondaryColor, 0.94, 0.04));
     const mAcc = registerMat(createMatteMaterial(def.accentColor, 0.65, 0.15, def.accentColor, 0.45));
 
-    // Hulking Basalt Torso & Hunchback Crag
     const torso = createFacetedMesh(new THREE.DodecahedronGeometry(0.85, 0), mPri);
     torso.position.y = 1.62;
     torso.scale.set(1.25, 1.1, 0.95);
+    torso.castShadow = true;
     bodyGroup.add(torso);
 
     const crag = createFacetedMesh(new THREE.IcosahedronGeometry(0.48, 0), mSec);
@@ -516,7 +549,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     crag.scale.set(1.2, 0.9, 1.0);
     bodyGroup.add(crag);
 
-    // Heavy Rock Legs
     leftLeg.position.set(-0.46, 0.9, 0);
     rightLeg.position.set(0.46, 0.9, 0);
 
@@ -532,7 +564,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     createRockLeg(leftLeg);
     createRockLeg(rightLeg);
 
-    // Monolithic Head
     headGroup.position.set(0, 2.32, 0.12);
     const head = createFacetedMesh(new THREE.BoxGeometry(0.54, 0.5, 0.48), mPri);
     headGroup.add(head);
@@ -545,7 +576,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     runeEyes.position.set(0, 0.02, 0.28);
     headGroup.add(runeEyes);
 
-    // Fortress Rampart Shoulders & Arms
     leftArm.position.set(-0.95, 1.88, 0);
     rightArm.position.set(0.95, 1.88, 0);
 
@@ -555,7 +585,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     const rPauldron = createFacetedMesh(new THREE.BoxGeometry(0.52, 0.48, 0.48), mPri);
     rightArm.add(rPauldron);
 
-    // Massive Fortress Tower Shield on Left Arm
     const shield = createFacetedMesh(new THREE.BoxGeometry(0.8, 1.45, 0.18), mSec);
     shield.position.set(0, -0.38, 0.38);
     shield.rotation.y = 0.15;
@@ -565,7 +594,6 @@ export function createHeroRig(heroId: HeroId, team: TeamId = 'ally'): HeroRig {
     shieldBoss.position.set(0, -0.38, 0.52);
     leftArm.add(shieldBoss);
 
-    // Granite Warhammer Rested on Right Shoulder
     weaponGroup.position.set(0.12, -0.2, 0.1);
     weaponGroup.rotation.x = -0.65;
     rightArm.add(weaponGroup);
@@ -607,7 +635,6 @@ export function updateHeroRigAnimation(
     rig.shieldMesh.rotation.y = animTime * 1.4;
   }
 
-  // Hit flash modulation
   const isFlashing = hitFlashTimer > 0;
   for (let i = 0; i < rig.materialsToFlash.length; i++) {
     const mat = rig.materialsToFlash[i];
@@ -620,7 +647,6 @@ export function updateHeroRigAnimation(
     }
   }
 
-  // Reset base transforms smoothly
   rig.bodyGroup.position.set(0, 0, 0);
   rig.bodyGroup.rotation.set(0, 0, 0);
   rig.headGroup.rotation.set(0, 0, 0);
